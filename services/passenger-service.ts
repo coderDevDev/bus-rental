@@ -271,32 +271,21 @@ export const passengerService = {
     return route.base_fare * passengers;
   },
 
-  async bookTicket(routeId: string) {
-    // First get the route details
-    const { data: route, error: routeError } = await supabase
-      .from('routes')
-      .select(
-        `
-        *,
-        from_location:locations!routes_from_location_fkey(city, state),
-        to_location:locations!routes_to_location_fkey(city, state)
-      `
-      )
-      .eq('id', routeId)
-      .single();
-
-    if (routeError) throw routeError;
-
-    // Create the ticket
+  async bookTicket(bookingData: {
+    route_id: string;
+    seat_number: string;
+    fare_amount: number;
+  }) {
+    // Start a Supabase transaction
     const { data: ticket, error: ticketError } = await supabase
       .from('tickets')
       .insert([
         {
-          route_id: routeId,
-          user_id: 1,
-          fare_amount: route.base_fare,
-          travel_date: new Date().toISOString(),
-          status: 'booked'
+          route_id: bookingData.route_id,
+          seat_number: bookingData.seat_number,
+          fare_amount: bookingData.fare_amount,
+          status: 'booked',
+          travel_date: new Date().toISOString()
         }
       ])
       .select()
@@ -304,79 +293,76 @@ export const passengerService = {
 
     if (ticketError) throw ticketError;
 
-    // Generate QR code
-    const { data: digitalTicket, error: digitalError } = await supabase
-      .from('digital_tickets')
+    // Create passenger booking
+    const { error: bookingError } = await supabase
+      .from('passenger_bookings')
       .insert([
         {
           ticket_id: ticket.id,
-          qr_code: `TICKET-${ticket.id}`
+          user_id: (await supabase.auth.getUser()).data.user?.id,
+          seat_number: parseInt(bookingData.seat_number),
+          status: 'booked'
         }
-      ])
-      .select()
-      .single();
+      ]);
 
-    if (digitalError) throw digitalError;
+    if (bookingError) throw bookingError;
 
-    return {
-      ...ticket,
-      route,
-      digital_ticket: digitalTicket
-    };
+    return ticket;
   },
 
-  async searchRoutes(params: { from?: string; to?: string; date?: string }) {
-    console.log({ params });
-    // First get available routes
-    const { data: routes, error } = await supabase
+  async searchRoutes(params: { from: string; to: string; date: string }) {
+    const { data, error } = await supabase
       .from('routes')
       .select(
         `
         *,
-        from_location:locations!routes_from_location_fkey(*),
-        to_location:locations!routes_to_location_fkey(*),
-        schedules:route_schedules(*),
-        stops:route_stops(
-          *,
-          location:locations(*)
+        from_location:locations!routes_from_location_fkey(
+          id,
+          city,
+          state
+        ),
+        to_location:locations!routes_to_location_fkey(
+          id,
+          city,
+          state
+        ),
+        assignments!inner(
+          id,
+          status,
+          start_date,
+          end_date,
+          bus:bus_id(
+            id,
+            bus_number,
+            bus_type,
+            capacity
+          ),
+          conductor:conductor_id(
+            id,
+            user:user_id(
+              name
+            )
+          )
         )
       `
       )
-      .eq('status', 'active')
-      .eq('from_location', params.from)
-      .eq('to_location', params.to);
+      .eq('from_location.city', params.from)
+      .eq('to_location.city', params.to)
+      .eq('assignments.status', 'active');
+    // .gte('assignments.start_date', new Date(params.date).toISOString())
+    // .lte('assignments.end_date', new Date(params.date).toISOString());
 
-    if (error) throw error;
-
-    // Get active assignments for these routes
-    if (routes?.length > 0) {
-      const { data: assignments, error: assignmentsError } = await supabase
-        .from('assignments')
-        .select(
-          `
-          *,
-          bus:buses(*),
-          conductor:conductors(*)
-        `
-        )
-        .in(
-          'route_id',
-          routes.map(r => r.id)
-        )
-        .eq('status', 'active')
-        .gte('start_date', params.date || new Date().toISOString())
-        .lte('end_date', params.date || new Date().toISOString());
-
-      if (assignmentsError) throw assignmentsError;
-
-      // Merge assignments with routes
-      return routes.map(route => ({
-        ...route,
-        assignments: assignments?.filter(a => a.route_id === route.id) || []
-      }));
+    if (error) {
+      console.error('Error searching routes:', error);
+      throw error;
     }
 
-    return routes || [];
+    console.log('Search results:', {
+      params,
+      results: data
+    });
+
+    return data;
   },
 
   async bookSeat(params: {
@@ -434,5 +420,53 @@ export const passengerService = {
 
     if (error) throw error;
     return data;
+  },
+
+  async getBusSeats(busId: string, routeId: string, date: string) {
+    try {
+      // Get the assignment for this bus and route
+      const { data: assignment, error: assignmentError } = await supabase
+        .from('assignments')
+        .select('id, bus:bus_id(capacity)')
+        .eq('bus_id', busId)
+        .eq('route_id', routeId)
+        .eq('status', 'active')
+        .gte('start_date', date)
+        .lte('end_date', date)
+        .single();
+
+      if (assignmentError) throw assignmentError;
+      if (!assignment) throw new Error('No active assignment found');
+
+      const totalSeats = assignment.bus?.capacity || 40;
+      const seats = Array.from({ length: totalSeats }, (_, i) => ({
+        number: (i + 1).toString(),
+        status: 'available' as const
+      }));
+
+      // Get booked seats
+      const { data: bookings, error: bookingsError } = await supabase
+        .from('tickets')
+        .select('seat_number')
+        .eq('route_id', routeId)
+        .eq('bus_id', busId)
+        .eq('status', 'booked')
+        .eq('travel_date', date);
+
+      if (bookingsError) throw bookingsError;
+
+      // Mark booked seats
+      bookings?.forEach(booking => {
+        const seatIndex = parseInt(booking.seat_number) - 1;
+        if (seatIndex >= 0 && seatIndex < seats.length) {
+          seats[seatIndex].status = 'booked';
+        }
+      });
+
+      return seats;
+    } catch (error) {
+      console.error('Error getting bus seats:', error);
+      throw error;
+    }
   }
 };

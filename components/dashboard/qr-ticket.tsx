@@ -1,4 +1,6 @@
-import { QRCodeSVG } from 'qrcode.react';
+'use client';
+
+import QRCode from 'qrcode.react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,10 +14,8 @@ interface QRTicketProps {
 export function QRTicket({ ticket }: QRTicketProps) {
   const ticketData = JSON.stringify({
     id: ticket.id,
-    number: ticket.ticket_number,
-    route: `${ticket.route?.from_location?.city} → ${ticket.route?.to_location?.city}`,
-    date: ticket.travel_date,
-    bus: ticket.bus?.bus_number
+    seat: ticket.seat_number,
+    route: ticket.route?.name
   });
 
   const handleDownload = () => {
@@ -35,8 +35,8 @@ export function QRTicket({ ticket }: QRTicketProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-4">
-        <div className="bg-white p-4 rounded-lg">
-          <QRCodeSVG value={ticketData} size={200} />
+        <div className="p-4 bg-white rounded-lg shadow">
+          <QRCode value={ticketData} size={200} />
         </div>
         <div className="text-center space-y-1">
           <p className="font-semibold">{ticket.ticket_number}</p>

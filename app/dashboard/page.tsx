@@ -76,6 +76,8 @@ export default function Dashboard() {
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
   const [searchResults, setSearchResults] = useState<Route[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -108,44 +110,53 @@ export default function Dashboard() {
     loadDashboardData();
   }, [user, toast]);
 
-  const handleSearch = async (searchParams: {
-    from: string;
-    to: string;
-    date: string;
-  }) => {
+  const handleSearch = async (formData: SearchFormData) => {
     try {
-      setLoading(true);
+      setIsLoading(true);
+      setError(null);
 
-      console.log({ searchParams });
-      const results = await passengerService.searchRoutes(searchParams);
+      console.log('Searching with params:', formData);
+
+      const results = await passengerService.searchRoutes({
+        from: formData.from,
+        to: formData.to,
+        date: formData.date
+      });
+
+      console.log('Search results:', results);
       setSearchResults(results);
     } catch (error) {
-      console.error('Error searching routes:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to search routes',
-        variant: 'destructive'
-      });
+      console.error('Search error:', error);
+      setError('Failed to search routes. Please try again.');
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const handleBooking = async (routeId: string) => {
+  const handleBooking = async (bookingData: {
+    route_id: string;
+    seat_number: string;
+    fare_amount: number;
+  }) => {
     try {
       setLoading(true);
-      // Implementation for booking
-      const ticket = await passengerService.bookTicket(routeId);
+      const ticket = await passengerService.bookTicket(bookingData);
       setActiveTicket(ticket);
+
+      // Show success message
       toast({
-        title: 'Success',
-        description: 'Ticket booked successfully'
+        title: 'Booking Successful',
+        description: 'Your ticket has been booked successfully!'
       });
+
+      // Refresh user tickets
+      const updatedTickets = await passengerService.getUserTickets();
+      setUserTickets(updatedTickets);
     } catch (error) {
-      console.error('Error booking ticket:', error);
+      console.error('Booking error:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to book ticket',
+        title: 'Booking Failed',
+        description: 'Failed to book ticket. Please try again.',
         variant: 'destructive'
       });
     } finally {
@@ -251,7 +262,7 @@ export default function Dashboard() {
                                 {route.name}
                               </h3>
                               <p className="text-sm text-muted-foreground">
-                                Route #{route.route_number}
+                                Route #{route.route_number || 'N/A'}
                               </p>
                             </div>
                             <Badge variant="secondary" className="text-sm">
@@ -265,10 +276,7 @@ export default function Dashboard() {
                               <MapPin className="h-4 w-4 text-primary" />
                               <div className="text-sm">
                                 <p className="font-medium">
-                                  {route.from_location.city}
-                                </p>
-                                <p className="text-muted-foreground">
-                                  {route.from_location.state}
+                                  {route.name.split('-')[0]}
                                 </p>
                               </div>
                             </div>
@@ -276,10 +284,7 @@ export default function Dashboard() {
                               <ArrowRight className="h-4 w-4" />
                               <div className="text-sm">
                                 <p className="font-medium">
-                                  {route.to_location.city}
-                                </p>
-                                <p className="text-muted-foreground">
-                                  {route.to_location.state}
+                                  {route.name.split('-')[1]}
                                 </p>
                               </div>
                             </div>
@@ -302,13 +307,37 @@ export default function Dashboard() {
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-muted-foreground" />
                               <span className="text-sm">
-                                {route.schedules?.[0]?.departure_time?.slice(
-                                  0,
-                                  5
-                                )}
+                                {route.assignments?.[0]?.start_date
+                                  ? new Date(
+                                      route.assignments[0].start_date
+                                    ).toLocaleTimeString([], {
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })
+                                  : 'N/A'}
                               </span>
                             </div>
                           </div>
+
+                          {/* Assignment Details */}
+                          {route.assignments?.[0] && (
+                            <div className="pt-4 border-t">
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                  <Bus className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">
+                                    {route.assignments[0].bus.bus_number}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">
+                                    {route.assignments[0].conductor.user.name}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
@@ -318,7 +347,10 @@ export default function Dashboard() {
                 {selectedRoute && (
                   <div className="space-y-6">
                     <BusTracker routeId={selectedRoute} />
-                    <FareEstimator onBook={handleBooking} />
+                    <FareEstimator
+                      route={searchResults.find(r => r.id === selectedRoute)}
+                      onBook={handleBooking}
+                    />
                   </div>
                 )}
               </div>

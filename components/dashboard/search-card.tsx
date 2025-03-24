@@ -40,7 +40,7 @@ export function SearchCard({ locations, onSubmit }: SearchCardProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Search Routes</CardTitle>
+        <CardTitle>Search Routesss</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

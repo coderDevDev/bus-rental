@@ -47,6 +47,7 @@ export interface Route {
   created_at: string;
   updated_at: string;
   tickets?: { count: number }[];
+  assignments?: Assignment[];
 }
 
 export interface RouteWithLocations
@@ -79,14 +80,17 @@ export interface Maintenance {
 
 export interface Assignment {
   id: string;
+  route_id: string;
   bus_id: string;
   conductor_id: string;
-  route_id: string;
   start_date: string;
   end_date: string;
-  status: 'active' | 'completed' | 'cancelled';
+  status: 'active' | 'scheduled' | 'completed' | 'cancelled';
   created_at: string;
   updated_at: string;
+  route?: Route;
+  bus?: Bus;
+  conductor?: Conductor;
 }
 
 export interface Location {
