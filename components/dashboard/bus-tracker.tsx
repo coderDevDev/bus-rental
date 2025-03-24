@@ -14,11 +14,18 @@ interface BusTrackerProps {
 
 export function BusTracker({ routeId }: BusTrackerProps) {
   const [tracking, setTracking] = useState<BusTracking | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTracking = async () => {
-      const data = await passengerService.trackBus(routeId);
-      setTracking(data);
+      try {
+        const data = await passengerService.trackBus(routeId);
+        setTracking(data);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching bus location:', err);
+        setError('Unable to track bus location');
+      }
     };
 
     fetchTracking();
@@ -27,7 +34,33 @@ export function BusTracker({ routeId }: BusTrackerProps) {
     return () => clearInterval(interval);
   }, [routeId]);
 
-  if (!tracking) return null;
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Live Bus Location</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-muted-foreground py-8">{error}</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!tracking) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Live Bus Location</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-muted-foreground py-8">
+            Loading bus location...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -36,7 +69,7 @@ export function BusTracker({ routeId }: BusTrackerProps) {
           <span>Live Bus Location</span>
           <Badge variant="outline">
             <Clock className="h-4 w-4 mr-2" />
-            Updated: {new Date(tracking.timestamp).toLocaleTimeString()}
+            Updated: {new Date(tracking.last_updated).toLocaleTimeString()}
           </Badge>
         </CardTitle>
       </CardHeader>

@@ -325,39 +325,31 @@ export const passengerService = {
     };
   },
 
-  async searchRoutes(params: {
-    from_location?: string;
-    to_location?: string;
-    date?: string;
-  }) {
-    // First get routes
-    const routeQuery = supabase
+  async searchRoutes(params: { from?: string; to?: string; date?: string }) {
+    console.log({ params });
+    // First get available routes
+    const { data: routes, error } = await supabase
       .from('routes')
       .select(
         `
         *,
         from_location:locations!routes_from_location_fkey(*),
         to_location:locations!routes_to_location_fkey(*),
-        buses:assignments(
-          bus:buses(*)
+        schedules:route_schedules(*),
+        stops:route_stops(
+          *,
+          location:locations(*)
         )
       `
       )
-      .eq('status', 'active');
-
-    if (params.from_location) {
-      routeQuery.eq('from_location', params.from_location);
-    }
-    if (params.to_location) {
-      routeQuery.eq('to_location', params.to_location);
-    }
-
-    const { data: routes, error } = await routeQuery;
+      .eq('status', 'active')
+      .eq('from_location', params.from)
+      .eq('to_location', params.to);
 
     if (error) throw error;
 
-    // Then get active assignments for these routes
-    if (routes && routes.length > 0) {
+    // Get active assignments for these routes
+    if (routes?.length > 0) {
       const { data: assignments, error: assignmentsError } = await supabase
         .from('assignments')
         .select(
@@ -417,11 +409,17 @@ export const passengerService = {
       .select(
         `
         *,
-        bus:buses(*),
-        assignment:assignments(*)
+        bus:bus_id(
+          id,
+          bus_number,
+          bus_type
+        )
       `
       )
-      .eq('assignment.route_id', route_id)
+      .eq('route_id', route_id)
+      .eq('status', 'active')
+      .order('last_updated', { ascending: false })
+      .limit(1)
       .single();
 
     if (error) throw error;

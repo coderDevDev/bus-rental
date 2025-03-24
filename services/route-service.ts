@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
-import type { Route, Location } from '@/types';
+import type { Route, Location, RouteSchedule, RouteStop } from '@/types';
 
 export const routeService = {
   async getAllRoutes() {
@@ -52,27 +52,11 @@ export const routeService = {
     return data;
   },
 
-  async createRoute(
-    routeData: Omit<Route, 'id' | 'created_at' | 'updated_at'>
-  ) {
+  async createRoute(routeData: Partial<Route>) {
     const { data, error } = await supabase
       .from('routes')
       .insert([routeData])
-      .select(
-        `
-        *,
-        from_location:locations!routes_from_location_fkey(
-          id,
-          city,
-          state
-        ),
-        to_location:locations!routes_to_location_fkey(
-          id,
-          city,
-          state
-        )
-      `
-      )
+      .select()
       .single();
 
     if (error) throw error;
@@ -145,35 +129,26 @@ export const routeService = {
       .select(
         `
         *,
-        from_location:locations!routes_from_location_fkey(
-          id,
-          city,
-          state
-        ),
-        to_location:locations!routes_to_location_fkey(
-          id,
-          city,
-          state
+        from_location:locations!routes_from_location_fkey(*),
+        to_location:locations!routes_to_location_fkey(*),
+        schedules:route_schedules(*),
+        stops:route_stops(
+          *,
+          location:locations(*)
         )
       `
       )
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .order('route_number');
 
     if (error) throw error;
     return data;
   },
 
-  async addScheduleToRoute(schedule: {
-    route_id: string;
-    departure_time: string;
-    arrival_time: string;
-    days_of_week: string[];
-    bus_id: string;
-    conductor_id: string;
-  }) {
+  async addRouteSchedule(scheduleData: Partial<RouteSchedule>) {
     const { data, error } = await supabase
       .from('route_schedules')
-      .insert([schedule])
+      .insert([scheduleData])
       .select()
       .single();
 
@@ -181,23 +156,12 @@ export const routeService = {
     return data;
   },
 
-  async getRouteSchedules(routeId: string) {
+  async addRouteStop(stopData: Partial<RouteStop>) {
     const { data, error } = await supabase
-      .from('route_schedules')
-      .select(
-        `
-        *,
-        bus:bus_id (*),
-        conductor:conductor_id (
-          *,
-          user:user_id (
-            name,
-            email
-          )
-        )
-      `
-      )
-      .eq('route_id', routeId);
+      .from('route_stops')
+      .insert([stopData])
+      .select()
+      .single();
 
     if (error) throw error;
     return data;

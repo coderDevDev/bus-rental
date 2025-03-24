@@ -32,6 +32,8 @@ export function SearchCard({ locations, onSubmit }: SearchCardProps) {
     if (!searchData.from || !searchData.to) {
       return;
     }
+
+    console.log({ searchData });
     onSubmit(searchData);
   };
 

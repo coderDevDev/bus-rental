@@ -131,21 +131,17 @@ export interface SignInFormData {
 export interface BusTracking {
   id: string;
   bus_id: string;
-  assignment_id: string;
+  route_id: string;
   latitude: number;
   longitude: number;
   speed: number;
   heading: number;
-  timestamp: string;
+  status: string;
+  last_updated: string;
   bus: {
     id: string;
     bus_number: string;
     bus_type: string;
-  };
-  assignment: {
-    id: string;
-    route_id: string;
-    conductor_id: string;
   };
 }
 
