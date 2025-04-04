@@ -1,31 +1,20 @@
 export interface ConductorAssignment {
   id: string;
+  bus_id: string;
   conductor_id: string;
   route_id: string;
-  bus_id: string;
   start_date: string;
   end_date: string;
   status: string;
-  route?: {
+  created_at: string;
+  updated_at: string;
+  route: Route;
+  bus: {
     id: string;
-    name: string;
-    start_location: string;
-    end_location: string;
-    stops: any[]; // Define proper type if needed
     status: string;
-    base_fare: number;
-  };
-  bus?: {
-    id: string;
-    bus_number: string;
     bus_type: string;
     capacity: number;
-    status: string;
-  };
-  conductor?: {
-    id: string;
-    name: string;
-    email: string;
+    bus_number: string;
   };
 }
 
@@ -33,28 +22,62 @@ export interface Route {
   id: string;
   name: string;
   route_number: string;
-  start_location: string;
-  end_location: string;
-  stops: RouteStop[];
-  fare: number;
-  status: 'active' | 'inactive';
+  from_location: {
+    city: string;
+    state: string;
+    latitude: number;
+    longitude: number;
+  };
+  to_location: {
+    city: string;
+    state: string;
+    latitude: number;
+    longitude: number;
+  };
+  base_fare: number;
+  status: string;
 }
 
-export interface RouteStop {
+export interface Location {
   id: string;
-  name: string;
-  coordinates: [number, number];
-  arrival_time: string;
-  departure_time: string;
-  sequence: number;
-  status: 'completed' | 'current' | 'upcoming';
+  city: string;
+  state: string;
+  latitude: number;
+  longitude: number;
 }
 
 export interface Bus {
   id: string;
   bus_number: string;
+  bus_type: 'standard' | 'luxury' | 'express';
   capacity: number;
   status: 'active' | 'maintenance' | 'inactive';
+}
+
+export interface LocationUpdate {
+  conductor_id: string;
+  assignment_id: string;
+  latitude: number;
+  longitude: number;
+  heading?: number;
+  updated_at: string;
+}
+
+export interface ConductorActivity {
+  id: string;
+  type: 'clock_in' | 'clock_out' | 'ticket_issued' | 'location_update';
+  conductor_id: string;
+  assignment_id: string;
+  ticket_id?: string;
+  details?: Record<string, any>;
+  created_at: string;
+}
+
+export interface CurrentLocation {
+  latitude: number;
+  longitude: number;
+  heading?: number;
+  updated_at: string;
 }
 
 export interface ConductorStats {
@@ -64,22 +87,8 @@ export interface ConductorStats {
   passengerCount: number;
 }
 
-export interface ConductorActivity {
+export interface RouteStop {
   id: string;
-  type:
-    | 'ticket_issued'
-    | 'passenger_boarded'
-    | 'passenger_alighted'
-    | 'location_updated';
-  conductor_id: string;
-  assignment_id: string;
-  ticket_id?: string;
-  passenger_id?: string;
-  details: {
-    location?: string;
-    amount?: number;
-    ticket_type?: string;
-    passenger_count?: number;
-  };
-  created_at: string;
+  location: Location;
+  sequence: number;
 }

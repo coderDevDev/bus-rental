@@ -25,7 +25,8 @@ import {
   MoreVertical,
   Eye,
   Edit,
-  Trash
+  Trash,
+  Wallet
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -319,7 +320,7 @@ export default function ConductorDashboard() {
     };
   }, []);
 
-  // Add this effect for location updates
+  // Update the location update effect
   useEffect(() => {
     if (!currentAssignment || !location || !user) return;
 
@@ -329,22 +330,42 @@ export default function ConductorDashboard() {
 
     const updateLocation = async () => {
       try {
+        if (!user.id || !currentAssignment.id) {
+          console.warn('Missing required IDs for location update');
+          return;
+        }
+
+        // get the conductor id from the user id
+        const conductorId = await conductorDashboardService.getConductorId(
+          user.id
+        );
         await conductorDashboardService.updateLocation({
-          conductorId: selectedConductorId,
-          assignmentId: currentAssignment.id,
+          conductor_id: conductorId,
+          assignment_id: currentAssignment.id,
           latitude: location.latitude,
           longitude: location.longitude,
-          heading: location.heading,
-          speed: location.speed
+          heading: location.heading
         });
         setLastUpdateTime(now);
       } catch (error) {
         console.error('Error updating location:', error);
+        // Show toast only for specific errors
+        if (
+          error instanceof Error &&
+          !error.message.includes('User not found') &&
+          !error.message.includes('conductor_id')
+        ) {
+          toast({
+            title: 'Location Update Failed',
+            description: 'Unable to update your current location',
+            variant: 'destructive'
+          });
+        }
       }
     };
 
     updateLocation();
-  }, [currentAssignment, location, user, lastUpdateTime]);
+  }, [currentAssignment, location, user, lastUpdateTime, toast]);
 
   const handleClockIn = async () => {
     if (!user || !currentAssignment) return;
@@ -391,38 +412,30 @@ export default function ConductorDashboard() {
     }
   };
 
-  // Update the mapData section
-
+  // Update the mapData transformation
   const mapData = currentAssignment?.route
     ? {
         startLocation: {
-          name: currentAssignment.route.start_location,
+          name: currentAssignment.route.from_location.city,
           coordinates: [
-            currentAssignment.route.from_location_longitude.longitude,
-            currentAssignment.route.from_location_latitude.latitude
-          ] as [number, number] // Default coordinates
+            currentAssignment.route.from_location.longitude,
+            currentAssignment.route.from_location.latitude
+          ] as [number, number]
         },
         endLocation: {
-          name: currentAssignment.route.end_location,
+          name: currentAssignment.route.to_location.city,
           coordinates: [
-            currentAssignment.route.to_location_longitude.longitude,
-            currentAssignment.route.to_location_latitude.latitude
-          ] as [number, number] // Default coordinates
+            currentAssignment.route.to_location.longitude,
+            currentAssignment.route.to_location.latitude
+          ] as [number, number]
         },
-        // stops: [
-        //   {
-        //     name: 'Current Stop',
-        //     coordinates: [121.05, 14.57] as [number, number],
-        //     isCurrent: true
-        //   }
-        // ],
-        currentLocation: location
+        currentLocation: currentLocation
           ? {
-              coordinates: [location.longitude, location.latitude] as [
-                number,
-                number
-              ],
-              heading: location.heading
+              coordinates: [
+                currentLocation.longitude,
+                currentLocation.latitude
+              ] as [number, number],
+              heading: currentLocation.heading
             }
           : undefined
       }
@@ -612,32 +625,36 @@ export default function ConductorDashboard() {
             </Card>
 
             {/* Stats Cards */}
-
-            {activeTab === 'overview' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                <StatCard
-                  title="Tickets Issued"
-                  value={todayStats.ticketsIssued}
-                  icon={TicketIcon}
-                  description="Today's total"
-                  iconClassName="bg-maroon-100"
-                />
-                <StatCard
-                  title="Active Hours"
-                  value={`${todayStats.activeHours} hrs`}
-                  icon={Clock}
-                  description="Today's shift time"
-                  iconClassName="bg-blue-100"
-                />
-                <StatCard
-                  title="Revenue Generated"
-                  value={`₱${todayStats.revenue.toLocaleString()}`}
-                  icon={DollarSign}
-                  description="Today's total"
-                  iconClassName="bg-green-100"
-                />
-              </div>
-            )}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard
+                title="Tickets Issued"
+                value={todayStats.ticketsIssued}
+                icon={TicketIcon}
+                description="Today's tickets"
+                className="bg-gradient-to-br from-maroon-50 to-maroon-100"
+              />
+              <StatCard
+                title="Revenue"
+                value={`₱${todayStats.revenue.toFixed(2)}`}
+                icon={Wallet}
+                description="Today's earnings"
+                className="bg-gradient-to-br from-green-50 to-green-100"
+              />
+              <StatCard
+                title="Active Hours"
+                value={`${todayStats.activeHours}h`}
+                icon={Clock}
+                description="Time on duty"
+                className="bg-gradient-to-br from-blue-50 to-blue-100"
+              />
+              <StatCard
+                title="Passengers"
+                value={passengerCount}
+                icon={Users}
+                description="Current passengers"
+                className="bg-gradient-to-br from-purple-50 to-purple-100"
+              />
+            </div>
           </>
         )}
 

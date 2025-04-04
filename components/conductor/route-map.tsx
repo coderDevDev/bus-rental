@@ -25,18 +25,14 @@ interface RouteMapProps {
     coordinates: [number, number]; // [longitude, latitude]
   };
   currentLocation?: {
-    coordinates: [number, number]; // [longitude, latitude]
+    coordinates: [number, number];
     heading?: number;
   };
   passengerLocation?: {
     coordinates: [number, number]; // [longitude, latitude]
     heading?: number;
   };
-  stops?: Array<{
-    name: string;
-    coordinates: [number, number]; // [longitude, latitude]
-    isCurrent?: boolean;
-  }>;
+  stops?: RouteStop[];
   className?: string;
   routeColor?: string;
   showPath?: boolean;
@@ -279,20 +275,19 @@ export function RouteMap({
         }
 
         // Fit bounds to show the entire route with padding
-        if (routeGeometry.coordinates.length > 0) {
-          const bounds = routeGeometry.coordinates.reduce(
-            (bounds, coord) => bounds.extend(coord as [number, number]),
-            new mapboxgl.LngLatBounds(
-              routeGeometry.coordinates[0] as [number, number],
-              routeGeometry.coordinates[0] as [number, number]
-            )
-          );
+        const bounds = routeGeometry.coordinates.reduce(
+          (bounds: mapboxgl.LngLatBounds, coord: [number, number]) =>
+            bounds.extend(coord),
+          new mapboxgl.LngLatBounds(
+            routeGeometry.coordinates[0] as [number, number],
+            routeGeometry.coordinates[0] as [number, number]
+          )
+        );
 
-          map.current?.fitBounds(bounds, {
-            padding: 50,
-            maxZoom: 15
-          });
-        }
+        map.current?.fitBounds(bounds, {
+          padding: 50,
+          maxZoom: 15
+        });
       } catch (error) {
         console.error('Error drawing route:', error);
       }

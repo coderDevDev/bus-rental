@@ -4,7 +4,9 @@ import type {
   ConductorStats,
   Route,
   Bus,
-  ConductorActivity
+  ConductorActivity,
+  LocationUpdate,
+  Location
 } from '@/types/conductor';
 import { routeService } from './route-service';
 import { busService } from './bus-service';
@@ -24,12 +26,54 @@ interface TicketHistory {
   created_at: string;
 }
 
-interface LocationData {
-  latitude: number;
-  longitude: number;
-  heading?: number;
-  speed?: number;
-  updated_at: string;
+interface TicketDetails {
+  id: string;
+  ticket_number: string;
+  passenger_name: string;
+  passenger_type: 'regular' | 'student' | 'senior';
+  seat_number: string;
+  from_location: string;
+  to_location: string;
+  amount: number;
+  payment_method: 'cash' | 'card';
+  payment_status: 'paid' | 'pending' | 'failed';
+  status: 'active' | 'completed' | 'cancelled';
+  created_at: string;
+  conductor?: {
+    id: string;
+    user?: {
+      name: string;
+    };
+  };
+  assignment?: {
+    id: string;
+    route?: {
+      name: string;
+      from_location: string;
+      to_location: string;
+    };
+    bus?: {
+      bus_number: string;
+    };
+  };
+}
+
+interface RouteDetailsResponse {
+  id: string;
+  name: string;
+  start_location: string;
+  end_location: string;
+  status: 'active';
+  base_fare: number;
+  from_location_latitude: number;
+  from_location_longitude: number;
+  to_location_latitude: number;
+  to_location_longitude: number;
+  currentLocation?: {
+    coordinates: [number, number];
+    heading?: number;
+    speed?: number;
+  };
 }
 
 export const conductorDashboardService = {
@@ -37,35 +81,36 @@ export const conductorDashboardService = {
     conductorId: string
   ): Promise<ConductorAssignment | null> {
     try {
-      const { data: assignment, error: assignmentError } = await supabase
+      const { data: assignment, error } = await supabase
         .from('assignments')
         .select(
           `
           *,
-          route:route_id(
+          route:route_id (
             id,
             name,
-            from_location:locations!routes_from_location_fkey(city),
-            to_location:locations!routes_to_location_fkey(city),
-            *,
-            from_location_latitude:locations!routes_from_location_fkey(latitude),
-            from_location_longitude:locations!routes_from_location_fkey(longitude),
-            to_location_latitude:locations!routes_to_location_fkey(latitude),
-            to_location_longitude:locations!routes_to_location_fkey(longitude)
+            route_number,
+            from_location:locations!routes_from_location_fkey (
+              city,
+              state,
+              latitude,
+              longitude
+            ),
+            to_location:locations!routes_to_location_fkey (
+              city,
+              state,
+              latitude,
+              longitude
+            ),
+            base_fare,
+            status
           ),
-          bus:bus_id(
+          bus:bus_id (
             id,
             bus_number,
             bus_type,
-            capacity
-          ),
-          conductor:conductor_id(
-            id,
-            conductor_id,
-            user:user_id(
-              name,
-              email
-            )
+            capacity,
+            status
           )
         `
         )
@@ -73,64 +118,10 @@ export const conductorDashboardService = {
         .eq('status', 'active')
         .single();
 
-      if (assignmentError) {
-        console.error('Error fetching assignment:', assignmentError);
-        throw assignmentError;
-      }
-
-      if (!assignment) {
-        console.log('No active assignment found for conductor:', conductorId);
-        return null;
-      }
-
-      console.log({ assignment });
-
-      // Format the data to match our types
-      const formattedAssignment: ConductorAssignment = {
-        id: assignment.id,
-        conductor_id: assignment.conductor_id,
-        route_id: assignment.route_id,
-        bus_id: assignment.bus_id,
-        start_date: assignment.start_date,
-        end_date: assignment.end_date,
-        status: assignment.status,
-        route: assignment.route
-          ? {
-              id: assignment.route.id,
-              name: assignment.route.name,
-              start_location: assignment.route.from_location?.city || '',
-              end_location: assignment.route.to_location?.city || '',
-              stops: [], // Temporarily set to empty array
-              status: 'active',
-              base_fare: assignment.route.base_fare,
-              from_location_latitude: assignment.route.from_location_latitude,
-              from_location_longitude: assignment.route.from_location_longitude,
-              to_location_latitude: assignment.route.to_location_latitude,
-              to_location_longitude: assignment.route.to_location_longitude
-            }
-          : undefined,
-        bus: assignment.bus
-          ? {
-              id: assignment.bus.id,
-              bus_number: assignment.bus.bus_number,
-              bus_type: assignment.bus.bus_type,
-              capacity: assignment.bus.capacity,
-              status: 'active'
-            }
-          : undefined,
-        conductor: assignment.conductor
-          ? {
-              id: assignment.conductor.id,
-              name: assignment.conductor.user?.name || '',
-              email: assignment.conductor.user?.email || ''
-            }
-          : undefined
-      };
-
-      console.log('Found active assignment:', formattedAssignment);
-      return formattedAssignment;
+      if (error) throw error;
+      return assignment;
     } catch (error) {
-      console.error('Error in getCurrentAssignment:', error);
+      console.error('Error fetching assignment:', error);
       throw error;
     }
   },
@@ -219,39 +210,23 @@ export const conductorDashboardService = {
     }
   },
 
-  async getPassengerCount(assignmentId: string) {
+  async getPassengerCount(assignmentId: string): Promise<number> {
     try {
-      // Check if tickets table exists
-      const { error: tableCheckError } = await supabase
-        .from('tickets')
-        .select('id')
-        .limit(1);
-
-      if (tableCheckError) {
-        console.log("Tickets table doesn't exist, returning mock data");
-        // Return mock data if table doesn't exist
-        return Math.floor(Math.random() * 30) + 10;
-      }
-
-      console.log({ assignmentId });
-      // Get count of tickets issued for this assignment
       const { count, error } = await supabase
         .from('tickets')
         .select('*', { count: 'exact', head: true })
         .eq('assignment_id', assignmentId)
         .eq('status', 'active');
 
-      console.log({ tata: count });
       if (error) throw error;
       return count || 0;
     } catch (error) {
       console.error('Error fetching passenger count:', error);
-      // Return mock data on error
-      return Math.floor(Math.random() * 30) + 10;
+      return 0;
     }
   },
 
-  async getCurrentLocation(assignmentId: string): Promise<LocationData | null> {
+  async getCurrentLocation(assignmentId: string): Promise<Location | null> {
     try {
       // Get the most recent location update for this assignment
       const { data, error } = await supabase
@@ -334,42 +309,55 @@ export const conductorDashboardService = {
   },
 
   async updateLocation({
-    conductorId,
-    assignmentId,
+    conductor_id,
+    assignment_id,
     latitude,
     longitude,
-    heading,
-    speed
+    heading
   }: {
-    conductorId: string;
-    assignmentId: string;
+    conductor_id: string;
+    assignment_id: string;
     latitude: number;
     longitude: number;
     heading?: number;
-    speed?: number;
   }) {
     try {
-      // Get the conductor record first to ensure it exists
+      if (!conductor_id || !assignment_id) {
+        throw new Error('Conductor ID and Assignment ID are required');
+      }
+
+      // First check if conductor exists
       const { data: conductor, error: conductorError } = await supabase
         .from('conductors')
         .select('id')
-        .eq('id', conductorId) // Use conductor.id directly since we're passing it
+        .eq('id', conductor_id)
         .single();
 
-      if (conductorError) throw conductorError;
-      if (!conductor) throw new Error('Conductor not found');
+      // If conductor doesn't exist, try to create profile
+      if (conductorError && conductorError.code === 'PGRST116') {
+        await this.getConductorId(conductor_id);
+      } else if (conductorError) {
+        throw conductorError;
+      }
 
-      const { error } = await supabase.from('location_updates').upsert({
-        conductor_id: conductorId,
-        assignment_id: assignmentId,
-        latitude,
-        longitude,
-        heading,
-        speed,
-        updated_at: new Date().toISOString()
-      });
+      // Now update location
+      const { data, error } = await supabase
+        .from('location_updates')
+        .insert([
+          {
+            conductor_id,
+            assignment_id,
+            latitude,
+            longitude,
+            heading,
+            updated_at: new Date().toISOString()
+          }
+        ])
+        .select()
+        .single();
 
       if (error) throw error;
+      return data;
     } catch (error) {
       console.error('Error updating location:', error);
       throw error;
@@ -465,22 +453,61 @@ export const conductorDashboardService = {
     return ticket;
   },
 
-  async getConductorId(userId: string): Promise<string | null> {
+  async getConductorId(userId: string): Promise<string> {
     try {
-      const { data, error } = await supabase
+      if (!userId) {
+        throw new Error('User ID is required');
+      }
+
+      console.log({ userId });
+      // First try to get existing conductor
+      const { data: conductor, error } = await supabase
         .from('conductors')
         .select('id')
         .eq('user_id', userId)
         .single();
 
-      if (error) {
-        console.error('Error fetching conductor:', error);
+      if (error && error.code === 'PGRST116') {
+        // Record not found
+        // Get user data first
+        const {
+          data: { user },
+          error: userError
+        } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          throw new Error('Unable to get user data');
+        }
+
+        // Create new conductor profile
+        const { data: newConductor, error: createError } = await supabase
+          .from('conductors')
+          .insert([
+            {
+              id: userId,
+              name: user.user_metadata?.name || 'Unknown',
+              email: user.email,
+              phone: user.user_metadata?.phone || '',
+              license_number: user.user_metadata?.license_number || '',
+              experience_years: user.user_metadata?.experience_years || 0,
+              status: 'active'
+            }
+          ])
+          .select()
+          .single();
+
+        if (createError) {
+          throw createError;
+        }
+
+        return newConductor.id;
+      } else if (error) {
         throw error;
       }
 
-      return data?.id || null;
+      return conductor.id;
     } catch (error) {
-      console.error('Error in getConductorId:', error);
+      console.error('Error getting conductor ID:', error);
       throw error;
     }
   },
@@ -660,25 +687,25 @@ export const conductorDashboardService = {
     }
   },
 
-  async getTicketDetails(ticketId: string): Promise<any> {
+  async getTicketDetails(ticketId: string): Promise<TicketDetails> {
     try {
       const { data, error } = await supabase
         .from('tickets')
         .select(
           `
           *,
-          conductor:conductor_id(
+          conductor:conductor_id (
             id,
-            user:user_id(name)
+            user:user_id (name)
           ),
-          assignment:assignment_id(
+          assignment:assignment_id (
             id,
-            route:route_id(
+            route:route_id (
               name,
               from_location,
               to_location
             ),
-            bus:bus_id(
+            bus:bus_id (
               bus_number
             )
           )
@@ -695,7 +722,9 @@ export const conductorDashboardService = {
     }
   },
 
-  async getRouteDetails(assignmentId: string) {
+  async getRouteDetailsForAssignment(
+    assignmentId: string
+  ): Promise<RouteDetailsResponse> {
     try {
       const { data: assignment, error } = await supabase
         .from('assignments')
@@ -729,23 +758,29 @@ export const conductorDashboardService = {
       // Get current location
       const currentLocation = await this.getCurrentLocation(assignmentId);
 
-      // Transform the data into the required format
+      if (!assignment?.route) {
+        throw new Error('Route not found');
+      }
+
+      const fromLocation = assignment.route.from_location[0];
+      const toLocation = assignment.route.to_location[0];
+
       return {
         id: assignment.route.id,
         name: assignment.route.name,
-        start_location: assignment.route.from_location.city,
-        end_location: assignment.route.to_location.city,
+        start_location: fromLocation.city,
+        end_location: toLocation.city,
         status: 'active',
         base_fare: assignment.route.base_fare,
-        from_location_latitude: assignment.route.from_location.latitude,
-        from_location_longitude: assignment.route.from_location.longitude,
-        to_location_latitude: assignment.route.to_location.latitude,
-        to_location_longitude: assignment.route.to_location.longitude,
+        from_location_latitude: fromLocation.latitude,
+        from_location_longitude: fromLocation.longitude,
+        to_location_latitude: toLocation.latitude,
+        to_location_longitude: toLocation.longitude,
         currentLocation: currentLocation
           ? {
               coordinates: [
-                currentLocation.latitude,
-                currentLocation.longitude
+                currentLocation.longitude,
+                currentLocation.latitude
               ] as [number, number],
               heading: currentLocation.heading,
               speed: currentLocation.speed
@@ -754,6 +789,46 @@ export const conductorDashboardService = {
       };
     } catch (error) {
       console.error('Error getting route details:', error);
+      throw error;
+    }
+  },
+
+  async recordActivity(activity: Omit<ConductorActivity, 'id' | 'created_at'>) {
+    try {
+      const { error } = await supabase.from('conductor_activities').insert({
+        ...activity,
+        created_at: new Date().toISOString()
+      });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error recording activity:', error);
+      throw error;
+    }
+  },
+
+  async createConductorProfile(userId: string, metadata: any) {
+    try {
+      const { data, error } = await supabase
+        .from('conductors')
+        .insert([
+          {
+            id: userId,
+            name: metadata.name,
+            email: metadata.email,
+            phone: metadata.phone,
+            license_number: metadata.license_number,
+            experience_years: metadata.experience_years,
+            status: 'active'
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating conductor profile:', error);
       throw error;
     }
   }

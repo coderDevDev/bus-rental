@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase/client';
 import { Ticket } from '@/types';
 import { saveAs } from 'file-saver';
 import QRCode from 'qrcode';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 export const ticketService = {
   async generateTicketHTML(ticket: Ticket): Promise<string> {
@@ -91,12 +93,140 @@ export const ticketService = {
     `;
   },
 
-  async downloadTicket(ticket: Ticket) {
+  async generatePDF(ticket: Ticket) {
     try {
-      const html = await this.generateTicketHTML(ticket);
-      const blob = new Blob([html], { type: 'text/html' });
-      saveAs(blob, `ticket-${ticket.ticket_number}.html`);
+      // Create PDF
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Generate QR code
+      const qrDataUrl = await QRCode.toDataURL(
+        ticket.qr_code ||
+          JSON.stringify({
+            id: ticket.id,
+            number: ticket.ticket_number
+          })
+      );
+
+      // Set font
+      pdf.setFont('helvetica');
+
+      // Header
+      pdf.setFontSize(24);
+      pdf.text('Bus Ticket', 105, 20, { align: 'center' });
+
+      pdf.setFontSize(18);
+      pdf.text(`#${ticket.ticket_number}`, 105, 30, { align: 'center' });
+
+      pdf.setFontSize(14);
+      pdf.text(`Status: ${ticket.status.toUpperCase()}`, 105, 40, {
+        align: 'center'
+      });
+
+      // QR Code
+      const qrImage = new Image();
+      qrImage.src = qrDataUrl;
+      pdf.addImage(qrImage, 'PNG', 65, 50, 80, 80);
+
+      // Details
+      pdf.setFontSize(12);
+      const startY = 150;
+      const lineHeight = 10;
+      let currentY = startY;
+
+      const addDetailRow = (label: string, value: string) => {
+        pdf.setTextColor(100);
+        pdf.text(label, 40, currentY);
+        pdf.setTextColor(0);
+        pdf.text(value, 170, currentY, { align: 'right' });
+        currentY += lineHeight;
+      };
+
+      addDetailRow('From:', ticket.from_location);
+      addDetailRow('To:', ticket.to_location);
+      addDetailRow('Passenger:', ticket.passenger_name);
+      addDetailRow('Seat:', ticket.seat_number);
+      addDetailRow('Amount:', `₱${ticket.amount.toFixed(2)}`);
+      addDetailRow('Payment Method:', ticket.payment_method.toUpperCase());
+      addDetailRow('Date:', new Date(ticket.created_at).toLocaleDateString());
+
+      // Footer
+      currentY += lineHeight * 2;
+      pdf.setFontSize(10);
+      pdf.setTextColor(100);
+      pdf.text(
+        'Please show this ticket to the conductor before boarding.',
+        105,
+        currentY,
+        { align: 'center' }
+      );
+      pdf.text(
+        'Valid only for the date and route shown above.',
+        105,
+        currentY + lineHeight,
+        { align: 'center' }
+      );
+
+      return pdf;
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      throw error;
+    }
+  },
+
+  async downloadPDF(ticket: Ticket) {
+    try {
+      const pdf = await this.generatePDF(ticket);
+      pdf.save(`ticket-${ticket.ticket_number}.pdf`);
       return true;
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      throw error;
+    }
+  },
+
+  async emailTicket(ticket: Ticket, email: string) {
+    try {
+      // Generate PDF
+      const pdf = await this.generatePDF(ticket);
+      const pdfBlob = pdf.output('blob');
+
+      // Create form data
+      const formData = new FormData();
+      formData.append('ticket', pdfBlob, `ticket-${ticket.ticket_number}.pdf`);
+      formData.append('email', email);
+      formData.append('ticketId', ticket.id);
+
+      // Send to API endpoint
+      const response = await fetch('/api/tickets/email', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send email');
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error emailing ticket:', error);
+      throw error;
+    }
+  },
+
+  async downloadTicket(ticket: Ticket, format: 'pdf' | 'html' = 'pdf') {
+    try {
+      if (format === 'pdf') {
+        return this.downloadPDF(ticket);
+      } else {
+        const html = await this.generateTicketHTML(ticket);
+        const blob = new Blob([html], { type: 'text/html' });
+        saveAs(blob, `ticket-${ticket.ticket_number}.html`);
+        return true;
+      }
     } catch (error) {
       console.error('Error downloading ticket:', error);
       throw error;

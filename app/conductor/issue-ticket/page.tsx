@@ -184,53 +184,61 @@ export default function IssueTicket() {
           throw new Error('Conductor profile not found');
         }
 
-        console.log({ conductorId });
         const assignment = await conductorDashboardService.getCurrentAssignment(
           conductorId
         );
         setCurrentAssignment(assignment);
 
         console.log({ assignment });
-
         if (assignment?.route) {
-          // Initialize stops with start and end locations
-
           setRouteDetails(assignment.route);
 
-          const initialStops = [
+          // Get the from and to locations from the route
+          const fromLocation = assignment.route.from_location;
+          const toLocation = assignment.route.to_location;
+
+          console.log({ fromLocation, toLocation });
+          // Initialize stops array with proper structure
+          const stops = [
             {
-              id: `${assignment.route.id}-start`,
-              name: assignment.route.start_location
+              id: 'start',
+              name: fromLocation?.city || '',
+              type: 'terminal'
             },
             {
-              id: `${assignment.route.id}-end`,
-              name: assignment.route.end_location
+              id: 'end',
+              name: toLocation?.city || '',
+              type: 'terminal'
             }
           ];
 
-          setAvailableStops(initialStops);
-          setFromStops(initialStops);
-          setToStops(initialStops);
+          // Filter out any stops with empty names
+          const validStops = stops.filter(stop => stop.name);
 
-          // Set default from/to locations
+          setAvailableStops(validStops);
+          setFromStops(validStops);
+          setToStops(validStops);
+
+          // Set default from location
           setFormData(prev => ({
             ...prev,
-            from: assignment.route.start_location || '',
-            to: assignment.route.end_location || ''
+            from: fromLocation?.city || '',
+            to: '' // Clear destination initially
           }));
         }
 
         // Get taken seats
-        const taken = await conductorDashboardService.getTakenSeats(
-          assignment.id
-        );
-        setTakenSeats(taken);
+        if (assignment) {
+          const taken = await conductorDashboardService.getTakenSeats(
+            assignment.id
+          );
+          setTakenSeats(taken);
+        }
       } catch (error) {
         console.error('Error loading data:', error);
         toast({
           title: 'Error',
-          description:
-            error instanceof Error ? error.message : 'Failed to load data',
+          description: 'Failed to load route data',
           variant: 'destructive'
         });
       } finally {
@@ -275,10 +283,11 @@ export default function IssueTicket() {
     }
   };
 
-  const getTicketPrice = () => {
-    console.log({ routeDetails });
+  const getTicketPrice = (ticketTypeId?: string) => {
     const baseFare = routeDetails?.base_fare || 0;
-    const ticketType = ticketTypes.find(t => t.id === formData.ticketType);
+    const ticketType = ticketTypes.find(
+      t => t.id === (ticketTypeId || formData.ticketType)
+    );
     if (!ticketType) return baseFare;
 
     const discount = (ticketType.discount_percentage / 100) * baseFare;
@@ -287,10 +296,33 @@ export default function IssueTicket() {
 
   const handleIssueTicket = async () => {
     if (!user || !currentAssignment || !routeDetails) return;
-    if (!formData.passengerName) {
+
+    // Validate required fields
+    const requiredFields = {
+      passengerName: 'Passenger name',
+      from: 'Pickup point',
+      to: 'Destination',
+      ticketType: 'Ticket type'
+    };
+
+    const missingFields = Object.entries(requiredFields)
+      .filter(([key]) => !formData[key])
+      .map(([_, label]) => label);
+
+    if (missingFields.length > 0) {
       toast({
-        title: 'Error',
-        description: 'Please enter passenger name',
+        title: 'Required Fields Missing',
+        description: `Please enter: ${missingFields.join(', ')}`,
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Validate seat selection if bus has capacity
+    if (currentAssignment?.bus?.capacity && !formData.seatNumber) {
+      toast({
+        title: 'Seat Selection Required',
+        description: 'Please select a seat for the passenger',
         variant: 'destructive'
       });
       return;
@@ -308,12 +340,27 @@ export default function IssueTicket() {
         fare: getTicketPrice(),
         paymentMethod: formData.paymentMethod as 'cash' | 'card',
         passengerName: formData.passengerName,
-        seatNumber: formData.seatNumber || undefined
+        seatNumber: formData.seatNumber || undefined,
+        passengerId: formData.passengerId || undefined
       });
+
+      // Update taken seats list after successful ticket issuance
+      setTakenSeats(prev => [...prev, formData.seatNumber]);
 
       toast({
         title: 'Success',
         description: `Ticket #${ticket.id} has been issued successfully`
+      });
+
+      // Reset form for next ticket
+      setFormData({
+        ticketType: 'regular',
+        from: currentAssignment.route.start_location,
+        to: currentAssignment.route.end_location,
+        paymentMethod: 'cash',
+        passengerName: '',
+        seatNumber: '',
+        passengerId: ''
       });
 
       router.push('/conductor');
@@ -417,7 +464,7 @@ export default function IssueTicket() {
                 value={formData.ticketType}
                 onValueChange={handleTicketTypeChange}
                 className="grid grid-cols-3 gap-4">
-                {/* {ticketTypes.map(type => (
+                {ticketTypes.map(type => (
                   <Label
                     key={type.id}
                     htmlFor={type.id}
@@ -427,32 +474,46 @@ export default function IssueTicket() {
                       id={type.id}
                       className="sr-only"
                     />
-                    <Receipt className="h-6 w-6 mb-2 text-maroon-700" />
+                    {/* <Receipt className="h-6 w-6 mb-2 text-maroon-700" /> */}
                     <span className="text-sm font-medium">{type.name}</span>
                     <span className="text-sm text-muted-foreground">
-                      ₱
-                      {(
-                        getTicketPrice() *
-                        (1 - type.discount_percentage / 100)
-                      ).toFixed(2)}
+                      ₱{getTicketPrice(type.id).toFixed(2)}
+                      {type.discount_percentage > 0 && (
+                        <span className="ml-1 text-green-600">
+                          (-{type.discount_percentage}%)
+                        </span>
+                      )}
                     </span>
                   </Label>
-                ))} */}
+                ))}
               </RadioGroup>
             </div>
 
+            {console.log({ fromStops })}
             <div className="space-y-2">
               <Label htmlFor="from">From</Label>
-              <Select value={formData.from} onValueChange={handleFromChange}>
+              <Select
+                value={formData.from}
+                onValueChange={handleFromChange}
+                disabled={isLoading}>
                 <SelectTrigger
                   id="from"
                   className="border-maroon-200 focus-visible:ring-maroon-500">
-                  <SelectValue placeholder="Select pickup point" />
+                  <SelectValue
+                    placeholder={
+                      isLoading ? 'Loading...' : 'Select pickup point'
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {fromStops.map(stop => (
                     <SelectItem key={stop.id} value={stop.name}>
                       {stop.name}
+                      {stop.type === 'terminal' && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          (Terminal)
+                        </span>
+                      )}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -464,25 +525,33 @@ export default function IssueTicket() {
               <Select
                 value={formData.to}
                 onValueChange={handleToChange}
-                disabled={!formData.from} // Disable until origin is selected
-              >
+                disabled={!formData.from || isLoading}>
                 <SelectTrigger
                   id="to"
                   className="border-maroon-200 focus-visible:ring-maroon-500">
                   <SelectValue
                     placeholder={
-                      formData.from
-                        ? 'Select destination'
-                        : 'Select pickup point first'
+                      isLoading
+                        ? 'Loading...'
+                        : !formData.from
+                        ? 'Select pickup point first'
+                        : 'Select destination'
                     }
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {toStops.map(stop => (
-                    <SelectItem key={stop.id} value={stop.name}>
-                      {stop.name}
-                    </SelectItem>
-                  ))}
+                  {toStops
+                    .filter(stop => stop.name !== formData.from)
+                    .map(stop => (
+                      <SelectItem key={stop.id} value={stop.name}>
+                        {stop.name}
+                        {stop.type === 'terminal' && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            (Terminal)
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
