@@ -162,7 +162,7 @@ export default function SignIn() {
                 Welcome Back
               </CardTitle>
               <CardDescription className="text-center">
-                Sign in to your BusGo account
+                Sign in to your account
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -231,7 +231,7 @@ export default function SignIn() {
           </Card>
 
           {/* Demo credentials */}
-          <Card className="w-full max-w-md mt-4">
+          {/* <Card className="w-full max-w-md mt-4">
             <CardHeader>
               <CardTitle className="text-sm">Demo Credentials</CardTitle>
             </CardHeader>
@@ -258,7 +258,7 @@ export default function SignIn() {
                 <p className="text-muted-foreground">Password: password</p>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
       </div>
     </ClientLayout>

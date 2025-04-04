@@ -92,3 +92,14 @@ export interface RouteStop {
   location: Location;
   sequence: number;
 }
+
+export interface TicketBreakdownResponse {
+  passenger_type: string;
+  count: number;
+}
+
+export interface TicketBreakdown {
+  regular: number;
+  student: number;
+  senior: number;
+}

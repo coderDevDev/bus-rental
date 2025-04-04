@@ -19,7 +19,14 @@ export async function signUp(
   email: string,
   password: string,
   role: Role = 'passenger',
-  name: string
+  metadata: {
+    name: string;
+    phone: string;
+    address: string;
+    birthdate: string;
+    gender: 'male' | 'female' | 'other';
+    avatar_url?: string;
+  }
 ) {
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -27,7 +34,7 @@ export async function signUp(
     options: {
       data: {
         role,
-        name
+        ...metadata // Include all metadata fields
       }
     }
   });
@@ -36,13 +43,20 @@ export async function signUp(
     throw new Error(error.message);
   }
 
-  // Create user profile in the database
+  // Create user profile in the database with additional fields
   if (data.user) {
     const { error: profileError } = await supabase.from('users').insert({
       id: data.user.id,
       email: data.user.email!,
       role,
-      name
+      name: metadata.name,
+      phone: metadata.phone,
+      address: metadata.address,
+      birthdate: metadata.birthdate,
+      gender: metadata.gender,
+      avatar_url: metadata.avatar_url,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     });
 
     if (profileError) {
@@ -62,16 +76,47 @@ export async function signUp(
         .insert({
           user_id: data.user.id,
           conductor_id: conductorId,
-          license_number: '',
-          phone: '',
+          name: metadata.name,
+          phone: metadata.phone,
+          address: metadata.address,
+          birthdate: metadata.birthdate,
           status: 'inactive',
-          experience_years: 0
+          experience_years: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         });
 
       if (conductorError) {
         throw new Error(conductorError.message);
       }
     }
+
+    // For passengers, create a passenger profile
+    // if (role === 'passenger') {
+    //   const passengerId = `PAS-${new Date().getFullYear()}-${Math.floor(
+    //     Math.random() * 1000
+    //   )
+    //     .toString()
+    //     .padStart(3, '0')}`;
+
+    //   const { error: passengerError } = await supabase
+    //     .from('passengers')
+    //     .insert({
+    //       user_id: data.user.id,
+    //       passenger_id: passengerId,
+    //       name: metadata.name,
+    //       phone: metadata.phone,
+    //       address: metadata.address,
+    //       birthdate: metadata.birthdate,
+    //       status: 'active',
+    //       created_at: new Date().toISOString(),
+    //       updated_at: new Date().toISOString()
+    //     });
+
+    //   if (passengerError) {
+    //     throw new Error(passengerError.message);
+    //   }
+    // }
   }
 
   return data;

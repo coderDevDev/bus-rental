@@ -8,17 +8,33 @@ export const routeService = {
       .select(
         `
         *,
-        from_location:locations!routes_from_location_fkey(
+        from_location:locations!routes_from_location_fkey (
           id,
           city,
           state
         ),
-        to_location:locations!routes_to_location_fkey(
+        to_location:locations!routes_to_location_fkey (
           id,
           city,
           state
         ),
-        tickets(count)
+        assignments:assignments (
+          id,
+          status,
+          conductor:conductors (
+            id,
+            status
+          ),
+          bus:buses (
+            id,
+            bus_number,
+            capacity,
+            status
+          ),
+          tickets:tickets (
+            count
+          )
+        )
       `
       )
       .order('created_at', { ascending: false });
@@ -243,5 +259,22 @@ export const routeService = {
 
     if (error) throw error;
     return data;
+  },
+
+  async getTakenSeats(assignmentId: string): Promise<string[]> {
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .select('seat_number')
+        .eq('assignment_id', assignmentId)
+        .in('status', ['active', 'approved', 'boarded'])
+        .not('seat_number', 'is', null);
+
+      if (error) throw error;
+      return data.map(ticket => ticket.seat_number);
+    } catch (error) {
+      console.error('Error getting taken seats:', error);
+      return [];
+    }
   }
 };

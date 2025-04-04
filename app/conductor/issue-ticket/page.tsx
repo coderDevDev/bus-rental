@@ -41,6 +41,17 @@ interface TicketType {
   discount_percentage: number;
 }
 
+// Add interface for form data
+interface FormData {
+  ticketType: string;
+  from: string;
+  to: string;
+  paymentMethod: string;
+  passengerName: string;
+  seatNumber: string;
+  passengerId: string;
+}
+
 const BusSeatLayout = ({
   capacity = 0,
   selectedSeat = '',
@@ -150,7 +161,7 @@ export default function IssueTicket() {
   const [currentAssignment, setCurrentAssignment] = useState<any>(null);
   const [routeDetails, setRouteDetails] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     ticketType: 'regular',
     from: '',
     to: '',
@@ -298,7 +309,10 @@ export default function IssueTicket() {
     if (!user || !currentAssignment || !routeDetails) return;
 
     // Validate required fields
-    const requiredFields = {
+    const requiredFields: Record<
+      keyof Pick<FormData, 'passengerName' | 'from' | 'to' | 'ticketType'>,
+      string
+    > = {
       passengerName: 'Passenger name',
       from: 'Pickup point',
       to: 'Destination',
@@ -306,7 +320,7 @@ export default function IssueTicket() {
     };
 
     const missingFields = Object.entries(requiredFields)
-      .filter(([key]) => !formData[key])
+      .filter(([key]) => !formData[key as keyof FormData])
       .map(([_, label]) => label);
 
     if (missingFields.length > 0) {
@@ -489,7 +503,6 @@ export default function IssueTicket() {
               </RadioGroup>
             </div>
 
-            {console.log({ fromStops })}
             <div className="space-y-2">
               <Label htmlFor="from">From</Label>
               <Select

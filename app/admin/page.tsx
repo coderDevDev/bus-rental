@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { useAuth } from '@/hooks/use-auth';
+
 import {
   Bus,
   Calendar,
@@ -20,16 +20,24 @@ import {
   Settings,
   User,
   Users,
-  ArrowUpRight
+  ArrowUpRight,
+  UserIcon
 } from 'lucide-react';
 import { busService } from '@/services/bus-service';
 import { routeService } from '@/services/route-service';
 import { conductorService } from '@/services/conductor-service';
 import { assignmentService } from '@/services/assignment-service';
-
+import { toast } from '@/components/ui/use-toast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/hooks/use-auth';
 export default function AdminDashboard() {
   const { user } = useAuth();
-
+  const { signOut } = useAuth();
   console.log({ user });
   const [stats, setStats] = useState({
     totalBuses: 0,
@@ -38,7 +46,8 @@ export default function AdminDashboard() {
     activeRoutes: 0,
     totalConductors: 0,
     activeConductors: 0,
-    totalRevenue: 0
+    totalRevenue: 0,
+    totalTickets: 0
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -55,27 +64,46 @@ export default function AdminDashboard() {
           assignmentService.getAllAssignments()
         ]);
 
-        // Calculate statistics
-        const activeBuses = buses.filter(bus => bus.status === 'active');
-        const activeRoutes = routes.filter(route => route.status === 'active');
-        const activeConductors = conductors.filter(
-          conductor => conductor.status === 'active'
-        );
+        // Calculate total tickets and revenue from assignments
+        const totalTickets = routes.reduce((sum, route) => {
+          const assignmentTickets =
+            route.assignments?.reduce((aSum, assignment) => {
+              return aSum + (assignment.tickets?.[0]?.count || 0);
+            }, 0) || 0;
+          return sum + assignmentTickets;
+        }, 0);
 
-        // Calculate revenue (this is a placeholder - replace with actual revenue calculation)
-        const totalRevenue = assignments.length * 1500; // Assuming ₱1500 per assignment
+        // Calculate revenue
+        const totalRevenue = routes.reduce((sum, route) => {
+          const assignmentRevenue =
+            route.assignments?.reduce((aSum, assignment) => {
+              return (
+                aSum + (assignment.tickets?.[0]?.count || 0) * route.base_fare
+              );
+            }, 0) || 0;
+          return sum + assignmentRevenue;
+        }, 0);
 
         setStats({
           totalBuses: buses.length,
-          activeBuses: activeBuses.length,
+          activeBuses: buses.filter(bus => bus.status === 'active').length,
           totalRoutes: routes.length,
-          activeRoutes: activeRoutes.length,
+          activeRoutes: routes.filter(route => route.status === 'active')
+            .length,
           totalConductors: conductors.length,
-          activeConductors: activeConductors.length,
-          totalRevenue
+          activeConductors: conductors.filter(
+            conductor => conductor.status === 'active'
+          ).length,
+          totalRevenue,
+          totalTickets
         });
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load dashboard data',
+          variant: 'destructive'
+        });
       } finally {
         setIsLoading(false);
       }
@@ -86,30 +114,41 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
-      <header className="border-b sticky top-0 bg-maroon-700 text-white z-10 shadow-md">
-        <div className="container flex items-center h-16 px-4">
-          <h1 className="font-bold text-xl">Admin Dashboard</h1>
-          <div className="ml-auto flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              asChild
-              className="text-white hover:bg-maroon-600">
-              <Link href="/admin/profile">
-                <User className="h-5 w-5" />
-                <span className="sr-only">Profile</span>
-              </Link>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              asChild
-              className="text-white hover:bg-maroon-600">
-              <Link href="/admin/settings">
-                <Settings className="h-5 w-5" />
-                <span className="sr-only">Settings</span>
-              </Link>
-            </Button>
+      <header className="border-b sticky top-0 bg-maroon-700 text-white z-10">
+        <div className="container flex h-14 items-center justify-between px-4">
+          <div className="flex items-center gap-4">
+            <h1 className="font-bold text-lg">NorthPoint Passenger</h1>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* <Button variant="ghost" size="icon" className="relative">
+            <Bell className="h-5 w-5" />
+            <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-maroon-600 text-[10px] font-medium text-white flex items-center justify-center">
+              2
+            </span>
+          </Button> */}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <UserIcon className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/profile">Profile</Link>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onClick={() => {
+                    //logout
+                    signOut();
+                  }}
+                  className="text-red-600">
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>

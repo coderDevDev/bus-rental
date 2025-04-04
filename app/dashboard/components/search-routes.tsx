@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -57,6 +57,7 @@ import { cn } from '@/lib/utils';
 import { toast } from '@/components/ui/use-toast';
 import { TicketConfirmation } from './ticket-confirmation';
 import { generateTicketPDF } from '@/lib/pdf-generator';
+import { routeService } from '@/services/route-service';
 
 interface SearchRoutesProps {
   locations: Location[];
@@ -82,21 +83,46 @@ export function SearchRoutes({
   const [bookingDialog, setBookingDialog] = useState(false);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [confirmedTicket, setConfirmedTicket] = useState<Ticket | null>(null);
+  const [takenSeats, setTakenSeats] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  console.log({ user });
   const [passengers, setPassengers] = useState<
     Array<{
       name: string;
       type: 'regular' | 'student' | 'senior';
       seatNumber: string;
     }>
-  >([
-    {
-      name: user?.user_metadata?.name || '',
-      type: 'regular',
-      seatNumber: ''
+  >([]);
+
+  useEffect(() => {
+    if (user) {
+      const userName =
+        user.user_metadata?.name || user.email?.split('@')[0] || '';
+      setPassengers([
+        {
+          name: userName,
+          type: 'regular',
+          seatNumber: ''
+        }
+      ]);
+      setIsLoading(false);
     }
-  ]);
+  }, [user]);
+
+  useEffect(() => {
+    const fetchTakenSeats = async () => {
+      if (selectedRoute) {
+        const route = results.find(r => r.id === selectedRoute);
+        const assignmentId = route?.assignments?.[0]?.id;
+        if (assignmentId) {
+          const seats = await routeService.getTakenSeats(assignmentId);
+          setTakenSeats(seats);
+        }
+      }
+    };
+
+    fetchTakenSeats();
+  }, [selectedRoute, results]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,7 +131,17 @@ export function SearchRoutes({
 
   const getAvailableSeats = (route: Route) => {
     const assignment = route.assignments?.[0];
-    return assignment?.bus?.capacity || 0;
+    if (!assignment) return 0;
+
+    const totalCapacity = assignment.bus?.capacity || 0;
+
+    // Get taken seats for this route's assignment
+    const takenSeatsCount = takenSeats.length;
+
+    // Calculate available seats
+    const availableSeats = totalCapacity - takenSeatsCount;
+
+    return Math.max(0, availableSeats); // Ensure we don't return negative numbers
   };
 
   const selectedRouteData = results.find(r => r.id === selectedRoute) as
@@ -128,6 +164,40 @@ export function SearchRoutes({
       toast({
         title: 'Error',
         description: 'No conductor assigned to this route',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Validate seat selections
+    const hasInvalidSeats = passengers.some(p => !p.seatNumber);
+    if (hasInvalidSeats) {
+      toast({
+        title: 'Error',
+        description: 'Please select seats for all passengers',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Check for duplicate seat selections
+    const seatNumbers = passengers.map(p => p.seatNumber);
+    const hasDuplicates = seatNumbers.length !== new Set(seatNumbers).size;
+    if (hasDuplicates) {
+      toast({
+        title: 'Error',
+        description: 'Each passenger must have a unique seat',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Check if any selected seat is already taken
+    const hasConflict = passengers.some(p => takenSeats.includes(p.seatNumber));
+    if (hasConflict) {
+      toast({
+        title: 'Error',
+        description: 'One or more selected seats are no longer available',
         variant: 'destructive'
       });
       return;
@@ -278,6 +348,19 @@ export function SearchRoutes({
     );
   };
 
+  const isSeatAvailable = (seatNumber: string) => {
+    return (
+      !takenSeats.includes(seatNumber) &&
+      !passengers.some(p => p.seatNumber === seatNumber)
+    );
+  };
+
+  const getSeatStatus = (seatNumber: string) => {
+    if (takenSeats.includes(seatNumber)) return 'taken';
+    if (passengers.some(p => p.seatNumber === seatNumber)) return 'selected';
+    return 'available';
+  };
+
   return (
     <div className="space-y-6">
       {/* Search Form */}
@@ -423,11 +506,13 @@ export function SearchRoutes({
                             </p>
                           </div>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className="bg-green-50 text-green-700 border-green-200">
-                          {getAvailableSeats(route)} seats available
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-maroon-500" />
+                          <span className="text-sm">
+                            {getAvailableSeats(route)} available /{' '}
+                            {route.assignments?.[0]?.bus?.capacity || 0} total
+                          </span>
+                        </div>
                       </div>
 
                       {/* Route Details */}
@@ -535,86 +620,102 @@ export function SearchRoutes({
       <Dialog open={bookingDialog} onOpenChange={setBookingDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Book Your Tickets</DialogTitle>
+            <DialogTitle>Book Tickets</DialogTitle>
           </DialogHeader>
-
-          <ScrollArea className="max-h-[600px] pr-4">
-            <div className="space-y-6">
-              {/* Passenger Forms */}
-              {passengers.map((passenger, index) => (
-                <div key={index} className="space-y-4 p-4 border rounded-lg">
-                  <h3 className="font-medium">Passenger {index + 1}</h3>
-
-                  <div className="space-y-2">
-                    <Label>Name</Label>
-                    <Input
-                      value={passenger.name}
-                      onChange={e => {
-                        const newPassengers = [...passengers];
-                        newPassengers[index].name = e.target.value;
-                        setPassengers(newPassengers);
-                      }}
-                      placeholder="Enter passenger name"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Passenger Type</Label>
-                    <RadioGroup
-                      value={passenger.type}
-                      onValueChange={value => {
-                        const newPassengers = [...passengers];
-                        newPassengers[index].type = value as
-                          | 'regular'
-                          | 'student'
-                          | 'senior';
-                        setPassengers(newPassengers);
-                      }}>
-                      <div className="flex gap-4">
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem
-                            value="regular"
-                            id={`regular-${index}`}
-                          />
-                          <Label htmlFor={`regular-${index}`}>Regular</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem
-                            value="student"
-                            id={`student-${index}`}
-                          />
-                          <Label htmlFor={`student-${index}`}>Student</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem
-                            value="senior"
-                            id={`senior-${index}`}
-                          />
-                          <Label htmlFor={`senior-${index}`}>Senior</Label>
-                        </div>
-                      </div>
-                    </RadioGroup>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Select Seatss</Label>
-                    <BusSeatLayout
-                      capacity={
-                        selectedRouteData?.assignments?.[0]?.bus?.capacity || 40
-                      }
-                      selectedSeat={passenger.seatNumber}
-                      onSeatSelect={seat => {
-                        const newPassengers = [...passengers];
-                        newPassengers[index].seatNumber = seat;
-                        setPassengers(newPassengers);
-                      }}
-                      takenSeats={selectedSeats}
-                    />
-                  </div>
+          <ScrollArea className="max-h-[80vh]">
+            <div className="space-y-6 p-4">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-maroon-700" />
                 </div>
-              ))}
+              ) : (
+                passengers.map((passenger, index) => (
+                  <div key={index} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Passenger Name</Label>
+                      <Input
+                        value={passenger.name}
+                        onChange={e => {
+                          const newPassengers = [...passengers];
+                          newPassengers[index].name = e.target.value;
+                          setPassengers(newPassengers);
+                        }}
+                        placeholder="Enter passenger name"
+                        className="border-maroon-200"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Passenger Type</Label>
+                      <RadioGroup
+                        value={passenger.type}
+                        onValueChange={value => {
+                          const newPassengers = [...passengers];
+                          newPassengers[index].type = value as
+                            | 'regular'
+                            | 'student'
+                            | 'senior';
+                          setPassengers(newPassengers);
+                        }}>
+                        <div className="flex gap-4">
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem
+                              value="regular"
+                              id={`regular-${index}`}
+                            />
+                            <Label htmlFor={`regular-${index}`}>Regular</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem
+                              value="student"
+                              id={`student-${index}`}
+                            />
+                            <Label htmlFor={`student-${index}`}>Student</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem
+                              value="senior"
+                              id={`senior-${index}`}
+                            />
+                            <Label htmlFor={`senior-${index}`}>Senior</Label>
+                          </div>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Select Seatss</Label>
+                      <BusSeatLayout
+                        capacity={
+                          selectedRouteData?.assignments?.[0]?.bus?.capacity ||
+                          40
+                        }
+                        selectedSeat={passenger.seatNumber}
+                        onSeatSelect={seat => {
+                          // Check if seat is already selected by another passenger
+                          const isSelectedByOther = passengers.some(
+                            p => p.seatNumber === seat && p !== passenger
+                          );
 
-              {/* Add Passenger Button */}
+                          if (isSelectedByOther) {
+                            toast({
+                              title: 'Seat Already Selected',
+                              description:
+                                'This seat is selected by another passenger',
+                              variant: 'destructive'
+                            });
+                            return;
+                          }
+
+                          const newPassengers = [...passengers];
+                          const index = newPassengers.indexOf(passenger);
+                          newPassengers[index].seatNumber = seat;
+                          setPassengers(newPassengers);
+                        }}
+                        takenSeats={takenSeats}
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -622,8 +723,6 @@ export function SearchRoutes({
                 className="w-full">
                 Add Another Passenger
               </Button>
-
-              {/* Payment Section */}
               <div className="space-y-4 border-t pt-4">
                 <h3 className="font-medium">Payment Details</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -652,8 +751,6 @@ export function SearchRoutes({
                   </div>
                 </div>
               </div>
-
-              {/* Action Buttons */}
               <div className="flex gap-2 justify-end">
                 <Button
                   variant="outline"

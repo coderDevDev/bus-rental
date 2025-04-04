@@ -243,10 +243,6 @@ export default function PassengerDashboard() {
               <Bell className="h-4 w-4 mr-2" />
               Notifications
             </TabsTrigger>
-            <TabsTrigger value="profile">
-              <User className="h-4 w-4 mr-2" />
-              Profile
-            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="search" className="mt-6">

@@ -76,6 +76,66 @@ interface RouteDetailsResponse {
   };
 }
 
+interface LocationWithTracking {
+  latitude: number;
+  longitude: number;
+  heading?: number;
+  speed?: number;
+  updated_at: string;
+}
+
+interface RouteWithLocations extends Route {
+  from_location: {
+    city: string;
+    state: string;
+    latitude: number;
+    longitude: number;
+  };
+  to_location: {
+    city: string;
+    state: string;
+    latitude: number;
+    longitude: number;
+  };
+}
+
+interface TicketBreakdown {
+  regular: number;
+  student: number;
+  senior: number;
+}
+
+interface ActivePassenger {
+  id: string;
+  name: string;
+  seatNumber: string;
+  destination: string;
+  ticketType: 'regular' | 'student' | 'senior';
+}
+
+interface TicketValidationResponse {
+  ticket: {
+    id: string;
+    ticket_number: string;
+    passenger_name: string;
+    from_location: string;
+    to_location: string;
+    status: string;
+  };
+  isValid: boolean;
+  message: string;
+}
+
+interface TimeRecord {
+  record_id: string;
+  conductor_id: string;
+  assignment_id: string;
+  clock_in: string;
+  clock_out?: string;
+  status: 'active' | 'completed';
+  duration_minutes?: number;
+}
+
 export const conductorDashboardService = {
   async getCurrentAssignment(
     conductorId: string
@@ -226,7 +286,9 @@ export const conductorDashboardService = {
     }
   },
 
-  async getCurrentLocation(assignmentId: string): Promise<Location | null> {
+  async getCurrentLocation(
+    assignmentId: string
+  ): Promise<LocationWithTracking | null> {
     try {
       // Get the most recent location update for this assignment
       const { data, error } = await supabase
@@ -253,141 +315,24 @@ export const conductorDashboardService = {
     }
   },
 
-  async clockIn(userId: string, assignmentId: string) {
+  async getActiveTimeRecord(conductorId: string): Promise<TimeRecord | null> {
     try {
-      // First get the conductor ID
-      const conductorId = await this.getConductorId(userId);
-      if (!conductorId) {
-        throw new Error('Conductor not found');
-      }
-
-      // Generate a UUID for record_id
-      const record_id = crypto.randomUUID();
-
-      const { data, error } = await supabase
-        .from('time_records')
-        .insert({
-          record_id,
-          conductor_id: conductorId,
-          assignment_id: assignmentId,
-          clock_in: new Date().toISOString(),
-          status: 'active'
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error clocking in:', error);
-        throw error;
-      }
-
-      return data;
-    } catch (error) {
-      console.error('Error in clockIn:', error);
-      throw error;
-    }
-  },
-
-  async clockOut(timeRecordId: string) {
-    try {
-      const { error } = await supabase
-        .from('time_records')
-        .update({
-          clock_out: new Date().toISOString(),
-          status: 'completed'
-        })
-        .eq('record_id', timeRecordId); // Use record_id instead of id
-
-      if (error) {
-        console.error('Error clocking out:', error);
-        throw error;
-      }
-    } catch (error) {
-      console.error('Error in clockOut:', error);
-      throw error;
-    }
-  },
-
-  async updateLocation({
-    conductor_id,
-    assignment_id,
-    latitude,
-    longitude,
-    heading
-  }: {
-    conductor_id: string;
-    assignment_id: string;
-    latitude: number;
-    longitude: number;
-    heading?: number;
-  }) {
-    try {
-      if (!conductor_id || !assignment_id) {
-        throw new Error('Conductor ID and Assignment ID are required');
-      }
-
-      // First check if conductor exists
-      const { data: conductor, error: conductorError } = await supabase
-        .from('conductors')
-        .select('id')
-        .eq('id', conductor_id)
-        .single();
-
-      // If conductor doesn't exist, try to create profile
-      if (conductorError && conductorError.code === 'PGRST116') {
-        await this.getConductorId(conductor_id);
-      } else if (conductorError) {
-        throw conductorError;
-      }
-
-      // Now update location
-      const { data, error } = await supabase
-        .from('location_updates')
-        .insert([
-          {
-            conductor_id,
-            assignment_id,
-            latitude,
-            longitude,
-            heading,
-            updated_at: new Date().toISOString()
-          }
-        ])
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error updating location:', error);
-      throw error;
-    }
-  },
-
-  async getActiveTimeRecord(conductorId: string) {
-    try {
-      console.log('Fetching active time record for conductor:', conductorId);
       const { data, error } = await supabase
         .from('time_records')
         .select('*')
         .eq('conductor_id', conductorId)
         .eq('status', 'active')
-        .order('clock_in', { ascending: false })
-        .limit(1);
+        .single();
 
-      if (error) throw error;
-
-      // Return null if no records found
-      if (!data || data.length === 0) {
-        console.log('No active time records found');
-        return null;
+      if (error) {
+        if (error.code === 'PGRST116') return null; // No active record
+        throw error;
       }
 
-      console.log('Found active time record:', data[0].id);
-      return data[0];
+      return data;
     } catch (error) {
-      console.error('Error fetching active time record:', error);
-      throw error;
+      console.error('Error getting active time record:', error);
+      return null;
     }
   },
 
@@ -755,33 +700,27 @@ export const conductorDashboardService = {
 
       if (error) throw error;
 
-      // Get current location
+      // Cast to unknown first to handle type mismatch
+      const route = assignment?.route as unknown as RouteWithLocations;
       const currentLocation = await this.getCurrentLocation(assignmentId);
 
-      if (!assignment?.route) {
-        throw new Error('Route not found');
-      }
-
-      const fromLocation = assignment.route.from_location[0];
-      const toLocation = assignment.route.to_location[0];
-
       return {
-        id: assignment.route.id,
-        name: assignment.route.name,
-        start_location: fromLocation.city,
-        end_location: toLocation.city,
+        id: route.id,
+        name: route.name,
+        start_location: route.from_location.city,
+        end_location: route.to_location.city,
         status: 'active',
-        base_fare: assignment.route.base_fare,
-        from_location_latitude: fromLocation.latitude,
-        from_location_longitude: fromLocation.longitude,
-        to_location_latitude: toLocation.latitude,
-        to_location_longitude: toLocation.longitude,
+        base_fare: route.base_fare,
+        from_location_latitude: route.from_location.latitude,
+        from_location_longitude: route.from_location.longitude,
+        to_location_latitude: route.to_location.latitude,
+        to_location_longitude: route.to_location.longitude,
         currentLocation: currentLocation
           ? {
               coordinates: [
                 currentLocation.longitude,
                 currentLocation.latitude
-              ] as [number, number],
+              ],
               heading: currentLocation.heading,
               speed: currentLocation.speed
             }
@@ -829,6 +768,267 @@ export const conductorDashboardService = {
       return data;
     } catch (error) {
       console.error('Error creating conductor profile:', error);
+      throw error;
+    }
+  },
+
+  async getTicketBreakdown(assignmentId: string): Promise<TicketBreakdown> {
+    try {
+      const { data, error } = await supabase.rpc('get_ticket_breakdown', {
+        p_assignment_id: assignmentId,
+        p_status: 'active'
+      });
+
+      if (error) throw error;
+
+      const breakdown = {
+        regular: 0,
+        student: 0,
+        senior: 0
+      };
+
+      if (Array.isArray(data)) {
+        data.forEach((item: { passenger_type: string; count: number }) => {
+          if (item.passenger_type in breakdown) {
+            breakdown[item.passenger_type as keyof TicketBreakdown] =
+              item.count;
+          }
+        });
+      }
+
+      return breakdown;
+    } catch (error) {
+      console.error('Error getting ticket breakdown:', error);
+      return { regular: 0, student: 0, senior: 0 };
+    }
+  },
+
+  async getActivePassengers(assignmentId: string): Promise<ActivePassenger[]> {
+    try {
+      const { data, error } = await supabase
+        .from('tickets')
+        .select(
+          `
+          id,
+          passenger_name,
+          passenger_type,
+          seat_number,
+          to_location
+        `
+        )
+        .eq('assignment_id', assignmentId)
+        .eq('status', 'active');
+
+      if (error) throw error;
+
+      return data.map(ticket => ({
+        id: ticket.id,
+        name: ticket.passenger_name,
+        seatNumber: ticket.seat_number,
+        destination: ticket.to_location,
+        ticketType: ticket.passenger_type
+      }));
+    } catch (error) {
+      console.error('Error getting active passengers:', error);
+      return [];
+    }
+  },
+
+  async cancelTicket(ticketId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({
+          status: 'cancelled',
+          cancelled_at: new Date().toISOString()
+        })
+        .eq('id', ticketId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error cancelling ticket:', error);
+      throw error;
+    }
+  },
+
+  async validateTicket(
+    qrData: string,
+    conductorId: string,
+    assignmentId: string
+  ): Promise<TicketValidationResponse> {
+    try {
+      // Parse QR data
+      const ticketData = JSON.parse(qrData);
+
+      // Verify ticket exists and is valid
+      const { data: ticket, error } = await supabase
+        .from('tickets')
+        .select('*')
+        .eq('id', ticketData.id)
+        .single();
+
+      if (error) throw new Error('Invalid ticket');
+      if (!ticket) throw new Error('Ticket not found');
+
+      // Check if ticket is already used
+      if (ticket.status !== 'active') {
+        return {
+          ticket,
+          isValid: false,
+          message: `Ticket is ${ticket.status}`
+        };
+      }
+
+      // Check if ticket is for this route
+      if (ticket.assignment_id !== assignmentId) {
+        return {
+          ticket,
+          isValid: false,
+          message: 'Ticket is for a different route'
+        };
+      }
+
+      // Record boarding
+      await supabase.from('passenger_boardings').insert({
+        ticket_id: ticket.id,
+        conductor_id: conductorId,
+        assignment_id: assignmentId,
+        boarding_time: new Date().toISOString()
+      });
+
+      // Update ticket status
+      await supabase
+        .from('tickets')
+        .update({ status: 'boarded' })
+        .eq('id', ticket.id);
+
+      return {
+        ticket,
+        isValid: true,
+        message: 'Ticket validated successfully'
+      };
+    } catch (error) {
+      console.error('Error validating ticket:', error);
+      throw error;
+    }
+  },
+
+  async clockIn(userId: string, assignmentId: string): Promise<TimeRecord> {
+    try {
+      const conductorId = await this.getConductorId(userId);
+      if (!conductorId) throw new Error('Conductor not found');
+
+      const record_id = crypto.randomUUID();
+      const { data, error } = await supabase
+        .from('time_records')
+        .insert({
+          record_id,
+          conductor_id: conductorId,
+          assignment_id: assignmentId,
+          clock_in: new Date().toISOString(),
+          status: 'active'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error clocking in:', error);
+      throw error;
+    }
+  },
+
+  async clockOut(timeRecordId: string): Promise<TimeRecord> {
+    try {
+      const clockOut = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('time_records')
+        .update({
+          clock_out: clockOut,
+          status: 'completed'
+        })
+        .eq('record_id', timeRecordId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error clocking out:', error);
+      throw error;
+    }
+  },
+
+  async updateLocation({
+    conductor_id,
+    assignment_id,
+    latitude,
+    longitude,
+    heading
+  }: {
+    conductor_id: string;
+    assignment_id: string;
+    latitude: number;
+    longitude: number;
+    heading?: number;
+  }) {
+    try {
+      if (!conductor_id || !assignment_id) {
+        throw new Error('Conductor ID and Assignment ID are required');
+      }
+
+      // First check if conductor exists
+      const { data: conductor, error: conductorError } = await supabase
+        .from('conductors')
+        .select('id')
+        .eq('id', conductor_id)
+        .single();
+
+      // If conductor doesn't exist, try to create profile
+      if (conductorError && conductorError.code === 'PGRST116') {
+        await this.getConductorId(conductor_id);
+      } else if (conductorError) {
+        throw conductorError;
+      }
+
+      // Now update location
+      const { data, error } = await supabase
+        .from('location_updates')
+        .insert([
+          {
+            conductor_id,
+            assignment_id,
+            latitude,
+            longitude,
+            heading,
+            updated_at: new Date().toISOString()
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating location:', error);
+      throw error;
+    }
+  },
+
+  async approveTicket(ticketId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({
+          status: 'approved',
+          approved_at: new Date().toISOString()
+        })
+        .eq('id', ticketId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error approving ticket:', error);
       throw error;
     }
   }
