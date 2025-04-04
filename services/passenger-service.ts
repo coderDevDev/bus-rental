@@ -297,26 +297,35 @@ export const passengerService = {
         `
         )
         .eq('status', 'active')
-        .eq('from_location.id', searchData.from)
-        .eq('to_location.id', searchData.to)
         .eq('assignments.status', 'active')
-        .gte('assignments.start_date', searchData.date)
-        .lte('assignments.end_date', searchData.date);
+        .gte('assignments.start_date', `${searchData.date}T00:00:00`)
+        .lte('assignments.start_date', `${searchData.date}T23:59:59`);
 
       if (error) {
         console.error('Error searching routes:', error);
         throw error;
       }
 
-      // Filter out routes with inactive buses or locations
+      // Filter routes by city names and active status
       const availableRoutes = routes?.filter(route => {
+        const matchesFromCity =
+          route.from_location?.city.toUpperCase() ===
+          searchData.from.toUpperCase();
+        const matchesToCity =
+          route.to_location?.city.toUpperCase() === searchData.to.toUpperCase();
         const isFromLocationActive = route.from_location?.status === 'active';
         const isToLocationActive = route.to_location?.status === 'active';
         const hasActiveBus = route.assignments?.some(
           assignment => assignment.bus?.status === 'active'
         );
 
-        return isFromLocationActive && isToLocationActive && hasActiveBus;
+        return (
+          matchesFromCity &&
+          matchesToCity &&
+          isFromLocationActive &&
+          isToLocationActive &&
+          hasActiveBus
+        );
       });
 
       console.log('Found routes:', availableRoutes);

@@ -14,12 +14,14 @@ import {
 
 import { Support } from '@/components/support/support';
 import { FeedbackForm } from '@/components/support/feedback-form';
-
+import { signOut } from '@/lib/supabase/auth';
+import { useAuth } from '@/hooks/use-auth';
 interface PassengerHeaderProps {
   user: User | null;
 }
 
 export function PassengerHeader({ user }: PassengerHeaderProps) {
+  const { signOut } = useAuth();
   return (
     <header className="border-b sticky top-0 bg-maroon-700 text-white z-10">
       <div className="container flex h-14 items-center justify-between px-4">
@@ -50,7 +52,11 @@ export function PassengerHeader({ user }: PassengerHeaderProps) {
                 <Link href="/support">Support</Link>
               </DropdownMenuItem>
 
-              <DropdownMenuItem className="text-red-600">
+              <DropdownMenuItem
+                onClick={() => {
+                  signOut();
+                }}
+                className="text-red-600">
                 Sign Out
               </DropdownMenuItem>
             </DropdownMenuContent>
