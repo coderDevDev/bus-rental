@@ -98,6 +98,7 @@ export default function PassengerDashboard() {
     date: string;
   }) => {
     try {
+      console.log({ searchData });
       const results = await passengerService.searchRoutes(searchData);
       setRoutes(results);
     } catch (error) {

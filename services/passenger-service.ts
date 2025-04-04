@@ -256,34 +256,73 @@ export const passengerService = {
 
   async searchRoutes(searchData: SearchFormData) {
     try {
+      console.log('Searching routes with:', searchData);
+
+      // Get routes that match the search criteria
       const { data: routes, error } = await supabase
         .from('routes')
         .select(
           `
-          *,
-          from_location:locations!routes_from_location_fkey (*),
-          to_location:locations!routes_to_location_fkey (*),
-          assignments!inner(
+          id,
+          route_number,
+          name,
+          base_fare,
+          distance,
+          status,
+          from_location:locations!routes_from_location_fkey (
             id,
+            city,
+            state,
+            status
+          ),
+          to_location:locations!routes_to_location_fkey (
+            id,
+            city,
+            state,
+            status
+          ),
+          assignments!inner (
+            id,
+            status,
+            start_date,
+            end_date,
             bus:bus_id (
               id,
               bus_number,
-              capacity
+              bus_type,
+              capacity,
+              status
             )
           )
         `
         )
         .eq('status', 'active')
-        .eq('from_location.city', searchData.from)
-        .eq('to_location.city', searchData.to)
+        .eq('from_location.id', searchData.from)
+        .eq('to_location.id', searchData.to)
         .eq('assignments.status', 'active')
         .gte('assignments.start_date', searchData.date)
         .lte('assignments.end_date', searchData.date);
 
-      if (error) throw error;
-      return routes || [];
+      if (error) {
+        console.error('Error searching routes:', error);
+        throw error;
+      }
+
+      // Filter out routes with inactive buses or locations
+      const availableRoutes = routes?.filter(route => {
+        const isFromLocationActive = route.from_location?.status === 'active';
+        const isToLocationActive = route.to_location?.status === 'active';
+        const hasActiveBus = route.assignments?.some(
+          assignment => assignment.bus?.status === 'active'
+        );
+
+        return isFromLocationActive && isToLocationActive && hasActiveBus;
+      });
+
+      console.log('Found routes:', availableRoutes);
+      return availableRoutes || [];
     } catch (error) {
-      console.error('Error searching routes:', error);
+      console.error('Error in searchRoutes:', error);
       throw error;
     }
   },

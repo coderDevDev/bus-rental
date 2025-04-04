@@ -12,6 +12,9 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 
+import { Support } from '@/components/support/support';
+import { FeedbackForm } from '@/components/support/feedback-form';
+
 interface PassengerHeaderProps {
   user: User | null;
 }
@@ -41,6 +44,10 @@ export function PassengerHeader({ user }: PassengerHeaderProps) {
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem asChild>
                 <Link href="/dashboard/profile">Profile</Link>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem asChild>
+                <Link href="/support">Support</Link>
               </DropdownMenuItem>
 
               <DropdownMenuItem className="text-red-600">
