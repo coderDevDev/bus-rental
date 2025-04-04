@@ -1,90 +1,73 @@
 import { supabase } from '@/lib/supabase/client';
-import type { Route, Ticket, Location } from '@/types';
+import type {
+  Route,
+  Ticket,
+  Location,
+  SearchFormData,
+  BookingData
+} from '@/types';
+
+interface TicketWithRoute extends Ticket {
+  route?: {
+    distance: number;
+  };
+}
 
 export const passengerService = {
   async getDashboardData(userId: string) {
-    // Get user's tickets with route info
-    const { data: tickets, error: ticketsError } = await supabase
-      .from('tickets')
-      .select(
+    try {
+      // Get user's tickets with route info
+      const { data: tickets, error: ticketsError } = await supabase
+        .from('tickets')
+        .select(
+          `
+          *,
+          route:route_id (
+            id,
+            route_number,
+            name,
+            from_location:locations!routes_from_location_fkey (city, state),
+            to_location:locations!routes_to_location_fkey (city, state),
+            distance,
+            base_fare
+          )
         `
-        *,
-        route:route_id (
-          id,
-          route_number,
-          name,
-          from_location:locations!routes_from_location_fkey (
-            city,
-            state
-          ),
-          to_location:locations!routes_to_location_fkey (
-            city,
-            state
-          ),
-          distance,
-          base_fare
-        ),
-        bus:bus_id (
-          bus_number,
-          bus_type
         )
-      `
-      )
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
-    if (ticketsError) throw ticketsError;
+      if (ticketsError) throw ticketsError;
 
-    // Get user profile
-    const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single();
+      // Get locations for search
+      const { data: locations, error: locationsError } = await supabase
+        .from('locations')
+        .select('*')
+        .eq('status', 'active');
 
-    if (profileError) throw profileError;
+      if (locationsError) throw locationsError;
 
-    // Get popular routes
-    const { data: routes, error: routesError } = await supabase
-      .from('routes')
-      .select(
-        `
-        *,
-        from_location:locations!routes_from_location_fkey (
-          city,
-          state
-        ),
-        to_location:locations!routes_to_location_fkey (
-          city,
-          state
-        ),
-        tickets(count)
-      `
-      )
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(5);
+      // Calculate stats
+      const stats = {
+        total_trips: tickets?.length || 0,
+        total_spent:
+          tickets?.reduce((sum, ticket) => sum + ticket.amount, 0) || 0,
+        total_distance:
+          tickets?.reduce(
+            (sum, ticket) => sum + (ticket.route?.distance || 0),
+            0
+          ) || 0
+      };
 
-    if (routesError) throw routesError;
-
-    // Calculate stats
-    const stats = {
-      total_trips: tickets?.length || 0,
-      total_spent:
-        tickets?.reduce((sum, ticket) => sum + ticket.fare_amount, 0) || 0,
-      total_distance:
-        tickets?.reduce(
-          (sum, ticket) => sum + (ticket.route?.distance || 0),
-          0
-        ) || 0
-    };
-
-    return {
-      tickets,
-      profile,
-      routes,
-      stats
-    };
+      return {
+        tickets: tickets || [],
+        locations: locations || [],
+        stats,
+        routes: []
+      };
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      throw error;
+    }
   },
 
   async getUserProfile(userId: string) {
@@ -271,98 +254,58 @@ export const passengerService = {
     return route.base_fare * passengers;
   },
 
-  async bookTicket(bookingData: {
-    route_id: string;
-    seat_number: string;
-    fare_amount: number;
-  }) {
-    // Start a Supabase transaction
-    const { data: ticket, error: ticketError } = await supabase
-      .from('tickets')
-      .insert([
-        {
-          route_id: bookingData.route_id,
-          seat_number: bookingData.seat_number,
-          fare_amount: bookingData.fare_amount,
-          status: 'booked',
-          travel_date: new Date().toISOString()
-        }
-      ])
-      .select()
-      .single();
-
-    if (ticketError) throw ticketError;
-
-    // Create passenger booking
-    const { error: bookingError } = await supabase
-      .from('passenger_bookings')
-      .insert([
-        {
-          ticket_id: ticket.id,
-          user_id: (await supabase.auth.getUser()).data.user?.id,
-          seat_number: parseInt(bookingData.seat_number),
-          status: 'booked'
-        }
-      ]);
-
-    if (bookingError) throw bookingError;
-
-    return ticket;
-  },
-
-  async searchRoutes(params: { from: string; to: string; date: string }) {
-    const { data, error } = await supabase
-      .from('routes')
-      .select(
-        `
-        *,
-        from_location:locations!routes_from_location_fkey(
-          id,
-          city,
-          state
-        ),
-        to_location:locations!routes_to_location_fkey(
-          id,
-          city,
-          state
-        ),
-        assignments!inner(
-          id,
-          status,
-          start_date,
-          end_date,
-          bus:bus_id(
+  async searchRoutes(searchData: SearchFormData) {
+    try {
+      const { data: routes, error } = await supabase
+        .from('routes')
+        .select(
+          `
+          *,
+          from_location:locations!routes_from_location_fkey (*),
+          to_location:locations!routes_to_location_fkey (*),
+          assignments!inner(
             id,
-            bus_number,
-            bus_type,
-            capacity
-          ),
-          conductor:conductor_id(
-            id,
-            user:user_id(
-              name
+            bus:bus_id (
+              id,
+              bus_number,
+              capacity
             )
           )
+        `
         )
-      `
-      )
-      .eq('from_location.city', params.from)
-      .eq('to_location.city', params.to)
-      .eq('assignments.status', 'active');
-    // .gte('assignments.start_date', new Date(params.date).toISOString())
-    // .lte('assignments.end_date', new Date(params.date).toISOString());
+        .eq('status', 'active')
+        .eq('from_location.city', searchData.from)
+        .eq('to_location.city', searchData.to)
+        .eq('assignments.status', 'active')
+        .gte('assignments.start_date', searchData.date)
+        .lte('assignments.end_date', searchData.date);
 
-    if (error) {
+      if (error) throw error;
+      return routes || [];
+    } catch (error) {
       console.error('Error searching routes:', error);
       throw error;
     }
+  },
 
-    console.log('Search results:', {
-      params,
-      results: data
-    });
+  async bookTicket(bookingData: BookingData) {
+    try {
+      const { data: ticket, error } = await supabase
+        .from('tickets')
+        .insert({
+          ...bookingData,
+          status: 'booked',
+          created_at: new Date().toISOString()
+        })
+        .select('*')
+        .single();
 
-    return data;
+      if (error) throw error;
+      return ticket;
+    } catch (error) {
+      console.error('Error booking ticket:', error);
+      throw error;
+    }
   },
 
   async bookSeat(params: {
@@ -459,7 +402,7 @@ export const passengerService = {
       bookings?.forEach(booking => {
         const seatIndex = parseInt(booking.seat_number) - 1;
         if (seatIndex >= 0 && seatIndex < seats.length) {
-          seats[seatIndex].status = 'booked';
+          seats[seatIndex].status = 'booked' as const;
         }
       });
 

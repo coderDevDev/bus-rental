@@ -246,7 +246,7 @@ export default function SignIn() {
               <div>
                 <p className="font-medium">Conductor:</p>
                 <p className="text-muted-foreground">
-                  Email: dextermiranda441@gmail.com
+                  Email: newdexm@gmail.com
                 </p>
                 <p className="text-muted-foreground">Password: password</p>
               </div>
