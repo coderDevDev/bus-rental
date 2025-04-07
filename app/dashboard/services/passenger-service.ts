@@ -134,10 +134,11 @@ export const passengerService = {
         `
         )
         .eq('status', 'active')
-        .eq('from_location.city', searchData.from)
-        .eq('to_location.city', searchData.to)
+        .eq('from_location', searchData.from)
+        .eq('to_location', searchData.to)
         .eq('assignments.status', 'active');
 
+      console.log({ jham: routes });
       if (error) throw error;
 
       // Transform the data to include conductor info in a more accessible way

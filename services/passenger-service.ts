@@ -258,7 +258,7 @@ export const passengerService = {
     try {
       console.log('Searching routes with:', searchData);
 
-      // Get routes that match the search criteria
+      // Query routes with the correct filters applied at the database level
       const { data: routes, error } = await supabase
         .from('routes')
         .select(
@@ -268,28 +268,41 @@ export const passengerService = {
           name,
           base_fare,
           distance,
+          estimated_duration,
           status,
-          from_location:locations!routes_from_location_fkey (
-            id,
+          from_location:from_location_id (
+            id, 
             city,
             state,
-            status
+            status,
+            latitude,
+            longitude
           ),
-          to_location:locations!routes_to_location_fkey (
+          to_location:to_location_id (
             id,
             city,
             state,
-            status
+            status,
+            latitude,
+            longitude
           ),
           assignments!inner (
             id,
             status,
             start_date,
             end_date,
+            conductor_id,
+            conductor_name,
+            conductor:conductor_id (
+              id,
+              user (
+                name,
+                email
+              )
+            ),
             bus:bus_id (
               id,
               bus_number,
-              bus_type,
               capacity,
               status
             )
@@ -297,36 +310,31 @@ export const passengerService = {
         `
         )
         .eq('status', 'active')
+        .eq('from_location_id', searchData.from) // Filter by location ID
+        .eq('to_location_id', searchData.to) // Filter by location ID
         .eq('assignments.status', 'active')
         .gte('assignments.start_date', `${searchData.date}T00:00:00`)
-        .lte('assignments.start_date', `${searchData.date}T23:59:59`);
+        .lte('assignments.end_date', `${searchData.date}T23:59:59`);
 
+      console.log({ jhamss: routes });
       if (error) {
         console.error('Error searching routes:', error);
         throw error;
       }
 
-      // Filter routes by city names and active status
-      const availableRoutes = routes?.filter(route => {
-        const matchesFromCity =
-          route.from_location?.city.toUpperCase() ===
-          searchData.from.toUpperCase();
-        const matchesToCity =
-          route.to_location?.city.toUpperCase() === searchData.to.toUpperCase();
-        const isFromLocationActive = route.from_location?.status === 'active';
-        const isToLocationActive = route.to_location?.status === 'active';
-        const hasActiveBus = route.assignments?.some(
-          assignment => assignment.bus?.status === 'active'
-        );
+      // Additional filtering for active buses
+      const availableRoutes =
+        routes?.filter(route => {
+          const hasActiveBus = route.assignments?.some(
+            assignment => assignment.bus?.status === 'active'
+          );
 
-        return (
-          matchesFromCity &&
-          matchesToCity &&
-          isFromLocationActive &&
-          isToLocationActive &&
-          hasActiveBus
-        );
-      });
+          return (
+            route.from_location?.status === 'active' &&
+            route.to_location?.status === 'active' &&
+            hasActiveBus
+          );
+        }) || [];
 
       console.log('Found routes:', availableRoutes);
       return availableRoutes || [];

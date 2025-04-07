@@ -370,7 +370,7 @@ export function SearchRoutes({
             Find Your Route
           </CardTitle>
           <CardDescription>
-            Search available bus routes and schedules
+            Search available bus routes and schedule
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -394,7 +394,7 @@ export function SearchRoutes({
                       {locations.map(location => (
                         <SelectItem
                           key={`from-${location.id}-${location.city}-${location.state}`}
-                          value={location.city}>
+                          value={location.id}>
                           {location.city}, {location.state}
                         </SelectItem>
                       ))}
@@ -421,7 +421,7 @@ export function SearchRoutes({
                       {locations.map(location => (
                         <SelectItem
                           key={`to-${location.id}-${location.city}-${location.state}`}
-                          value={location.city}>
+                          value={location.id}>
                           {location.city}, {location.state}
                         </SelectItem>
                       ))}

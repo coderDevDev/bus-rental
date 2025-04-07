@@ -99,7 +99,14 @@ export default function PassengerDashboard() {
   }) => {
     try {
       console.log({ searchData });
+
+      // Now searchData contains location IDs, not city names
+      // from: "23da22b0-e017-411e-9059-ebb0cf9b7d95"
+      // to: "5eb5f2a1-0674-4379-adb2-f6df6485dca4"
+
       const results = await passengerService.searchRoutes(searchData);
+
+      // No need to filter here - the service will handle it correctly
       setRoutes(results);
     } catch (error) {
       toast({
@@ -181,8 +188,6 @@ export default function PassengerDashboard() {
   const activeTickets = tickets.filter(t => t.status === 'active');
 
   if (loading) return <DashboardSkeleton />;
-
-  console.log({ locations });
 
   return (
     <div className="min-h-screen bg-gray-50">
