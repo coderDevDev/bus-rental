@@ -7,12 +7,22 @@ const clientOnlyPages = [
   '/onboarding',
   '/dashboard',
   '/conductor',
-  '/conductor/issue-ticket'
+  '/conductor/issue-ticket',
+  '/payment'
 ];
 
-export function withClientOnly(page: ReactNode, path: string) {
-  if (clientOnlyPages.includes(path)) {
+export function withClientOnly(page: ReactNode, pathname?: string) {
+  // If no pathname is provided or if we can't determine it, wrap the page to be safe
+  if (!pathname) {
     return <ClientOnly>{page}</ClientOnly>;
   }
+
+  // Check if any of our patterns match the current pathname
+  const shouldWrap = clientOnlyPages.some(path => pathname.startsWith(path));
+
+  if (shouldWrap) {
+    return <ClientOnly>{page}</ClientOnly>;
+  }
+
   return page;
 }

@@ -1,45 +1,73 @@
-"use client"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, CreditCard, Landmark, Phone, Shield } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+'use client';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
+import { ArrowLeft, CreditCard, Landmark, Phone, Shield } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import ClientOnly from '@/components/client-only';
+import dynamic from 'next/dynamic';
 
-export default function Payment() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { toast } = useToast()
+// Use the Next.js dynamic import with SSR disabled
+export default dynamic(() => Promise.resolve(PaymentPage), {
+  ssr: false
+});
 
-  const busId = searchParams.get("bus") || "1"
-  const seatsParam = searchParams.get("seats") || ""
-  const selectedSeats = seatsParam.split(",").map(Number)
-  const totalAmount = selectedSeats.length * (20 + Number.parseInt(busId) * 5)
+function PaymentPage() {
+  return (
+    <ClientOnly>
+      <PaymentContent />
+    </ClientOnly>
+  );
+}
+
+function PaymentContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
+
+  const busId = searchParams.get('bus') || '1';
+  const seatsParam = searchParams.get('seats') || '';
+  const selectedSeats = seatsParam.split(',').map(Number);
+  const totalAmount = selectedSeats.length * (20 + Number.parseInt(busId) * 5);
 
   const handlePayment = () => {
     toast({
-      title: "Payment Successful",
-      description: "Your booking has been confirmed",
-    })
+      title: 'Payment Successful',
+      description: 'Your booking has been confirmed'
+    });
 
-    router.push("/booking-confirmation")
-  }
+    router.push('/booking-confirmation');
+  };
 
   return (
     <div className="flex flex-col min-h-screen">
       <header className="border-b sticky top-0 bg-primary text-primary-foreground z-10">
         <div className="container flex items-center h-14 px-4">
-          <Button variant="ghost" size="icon" asChild className="text-primary-foreground">
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            className="text-primary-foreground">
             <Link href={`/select-seats/${busId}`}>
               <ArrowLeft className="h-5 w-5" />
               <span className="sr-only">Back</span>
             </Link>
           </Button>
-          <h1 className="font-bold text-lg absolute left-1/2 -translate-x-1/2">Payment</h1>
+          <h1 className="font-bold text-lg absolute left-1/2 -translate-x-1/2">
+            Payment
+          </h1>
         </div>
       </header>
 
@@ -47,7 +75,9 @@ export default function Payment() {
         <Card className="mb-4">
           <CardHeader>
             <CardTitle>Booking Summary</CardTitle>
-            <CardDescription>Express Bus {String.fromCharCode(64 + Number.parseInt(busId))}</CardDescription>
+            <CardDescription>
+              Express Bus {String.fromCharCode(64 + Number.parseInt(busId))}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -61,7 +91,7 @@ export default function Payment() {
               </div>
               <div className="flex justify-between">
                 <span>Selected Seats</span>
-                <span>{selectedSeats.join(", ")}</span>
+                <span>{selectedSeats.join(', ')}</span>
               </div>
               <div className="flex justify-between font-bold">
                 <span>Total Amount</span>
@@ -74,7 +104,9 @@ export default function Payment() {
         <Card>
           <CardHeader>
             <CardTitle>Payment Method</CardTitle>
-            <CardDescription>Choose your preferred payment method</CardDescription>
+            <CardDescription>
+              Choose your preferred payment method
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="card">
@@ -172,6 +204,5 @@ export default function Payment() {
         </Card>
       </main>
     </div>
-  )
+  );
 }
-
