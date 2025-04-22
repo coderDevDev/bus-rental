@@ -8,7 +8,8 @@ const clientOnlyPages = [
   '/dashboard',
   '/conductor',
   '/conductor/issue-ticket',
-  '/payment'
+  '/payment',
+  '/support'
 ];
 
 export function withClientOnly(page: ReactNode, pathname?: string) {
