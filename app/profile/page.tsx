@@ -6,50 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Settings } from 'lucide-react';
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import createClientComponent from '@/app/dynamic-wrap';
-import ClientOnly from '@/components/client-only';
-import dynamic from 'next/dynamic';
-import { useAuth } from '@/hooks/use-auth';
-
-// Use dynamic import with SSR disabled
-export default dynamic(() => Promise.resolve(ProfilePage), {
-  ssr: false
-});
-
-function ProfilePage() {
-  return (
-    <ClientOnly>
-      <ProfileContent />
-    </ClientOnly>
-  );
-}
-
-function ProfileContent() {
-  const router = useRouter();
-  const { user } = useAuth();
-
-  useEffect(() => {
-    // Redirect based on user role
-    if (user) {
-      if (user.role === 'admin') {
-        router.push('/admin/profile');
-      } else if (user.role === 'conductor') {
-        router.push('/conductor/profile');
-      } else {
-        router.push('/dashboard/profile');
-      }
-    }
-  }, [user, router]);
-
-  // Simple loading state while we redirect
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <p className="text-lg text-gray-600">Redirecting to your profile...</p>
-    </div>
-  );
-}
 
 export default function Profile() {
   return (
