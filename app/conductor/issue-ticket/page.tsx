@@ -26,7 +26,8 @@ import {
   Send,
   Receipt,
   CreditCard,
-  Wallet
+  Wallet,
+  BugIcon
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useRouter } from 'next/navigation';
@@ -719,6 +720,15 @@ export default function IssueTicket() {
                 className="w-full gap-2 border-maroon-200 hover:bg-maroon-50">
                 <Send className="h-4 w-4" />
                 Send Digital Ticket
+              </Button>
+            )}
+            {process.env.NODE_ENV === 'development' && (
+              <Button
+                variant="outline"
+                className="w-full gap-2 border-gray-200 hover:bg-gray-50"
+                onClick={testTicketCreation}>
+                <BugIcon className="h-4 w-4" />
+                Test Ticket Creation
               </Button>
             )}
           </CardFooter>

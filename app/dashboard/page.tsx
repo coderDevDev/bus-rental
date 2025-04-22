@@ -34,6 +34,7 @@ import type {
 import { NotificationPreferences } from './components/notification-preferences';
 import { PassengerProfile } from './components/passenger-profile';
 import { JourneyHistory } from './components/journey-history';
+import ClientOnly from '@/components/client-only';
 
 interface DashboardStats {
   total_trips: number;
@@ -41,7 +42,15 @@ interface DashboardStats {
   total_distance: number;
 }
 
-export default function PassengerDashboard() {
+export default function DashboardPage() {
+  return (
+    <ClientOnly>
+      <DashboardPageContent />
+    </ClientOnly>
+  );
+}
+
+function DashboardPageContent() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
