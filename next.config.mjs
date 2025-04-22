@@ -38,11 +38,11 @@ const nextConfig = {
     return config;
   },
 
-  experimental: {
-    appDir: true,
-    esmExternals: 'loose',
-    serverComponents: false
-  },
+  // experimental: {
+  //   appDir: true,
+  //   esmExternals: 'loose',
+  //   serverComponents: false
+  // },
 
   staticPageGenerationTimeout: 1000
 };
