@@ -33,7 +33,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { dynamic } from 'next/dynamic';
+import dynamic from 'next/dynamic';
+import ClientOnly from '@/components/client-only';
 
 const onboardingSteps = [
   {
@@ -213,6 +214,14 @@ export default dynamic(() => Promise.resolve(OnboardingPage), {
 });
 
 function OnboardingPage() {
+  return (
+    <ClientOnly>
+      <OnboardingContent />
+    </ClientOnly>
+  );
+}
+
+function OnboardingContent() {
   const router = useRouter();
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
