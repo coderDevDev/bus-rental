@@ -14,8 +14,23 @@ import {
 import { ArrowLeft, Bus, Check } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useRouter } from 'next/navigation';
+import ClientOnly from '@/components/client-only';
+import dynamic from 'next/dynamic';
 
-export default function SelectSeats({ params }: { params: { id: string } }) {
+// Make this a dynamic component with SSR disabled
+export default dynamic(() => Promise.resolve(SelectSeatsPage), {
+  ssr: false
+});
+
+function SelectSeatsPage({ params }: { params: { id: string } }) {
+  return (
+    <ClientOnly>
+      <SelectSeats params={params} />
+    </ClientOnly>
+  );
+}
+
+function SelectSeats({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { toast } = useToast();
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
@@ -202,14 +217,4 @@ export default function SelectSeats({ params }: { params: { id: string } }) {
       </main>
     </div>
   );
-}
-
-export function generateStaticParams() {
-  // Return all possible IDs that this route should generate
-  return [
-    { id: '1' },
-    { id: '2' },
-    { id: '3' }
-    // Add all other possible bus IDs here
-  ];
 }
