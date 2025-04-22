@@ -25,7 +25,8 @@ const nextConfig = {
   },
   reactStrictMode: true,
 
-  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
+  // Change this to enable dynamic routes
+  // output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
 
   webpack: (config, { isServer, dev }) => {
     if (!dev && isServer) {
@@ -34,7 +35,6 @@ const nextConfig = {
         'react-dom/server': path.resolve(__dirname, './scripts/empty-module.js')
       };
     }
-
     return config;
   },
 
