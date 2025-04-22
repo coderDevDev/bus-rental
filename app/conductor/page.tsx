@@ -603,6 +603,28 @@ export default function ConductorDashboard() {
     }
   }, [simulateMovement]);
 
+  // Add a useEffect that refreshes data when the component mounts or gains focus
+  useEffect(() => {
+    // Load dashboard data when the component mounts
+    if (user) {
+      loadDashboardData();
+    }
+
+    // Also set up a listener for when the window regains focus
+    // This ensures data refreshes when returning from another page
+    const handleFocus = () => {
+      if (user) {
+        loadDashboardData();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [user, loadDashboardData]);
+
   if (!isLoaded || !user) {
     return (
       <div className="flex flex-col min-h-screen">

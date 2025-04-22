@@ -491,72 +491,51 @@ export const conductorDashboardService = {
     }
   },
 
-  async issueTicket(data: {
-    conductorId: string;
-    assignmentId: string;
-    fromLocation: string;
-    toLocation: string;
-    ticketType: 'regular' | 'student' | 'senior';
-    fare: number;
-    paymentMethod: 'cash' | 'card';
-    passengerName: string;
-    seatNumber?: string;
-    passengerId?: string;
+  async issueTicket(ticketData: {
+    passenger_name: string;
+    passenger_type: string;
+    seat_number: string;
+    from_location: string;
+    to_location: string;
+    amount: number;
+    payment_method: string;
+    assignment_id: string;
+    conductor_id: string;
   }) {
     try {
-      // First get the conductor ID
-      const conductorId = await this.getConductorId(data.conductorId);
-      if (!conductorId) {
-        throw new Error('Conductor not found');
+      // Generate ticket ID and number
+      const id = crypto.randomUUID();
+      const ticket_number = `TKT-${Math.floor(
+        100000 + Math.random() * 900000
+      )}`;
+
+      // Add current timestamp
+      const now = new Date().toISOString();
+
+      // Make sure conductor_id is provided
+      if (!ticketData.conductor_id) {
+        throw new Error('Conductor ID is required to issue a ticket');
       }
 
-      // Generate QR code data
-      const qrData = {
-        ticket_type: data.ticketType,
-        from: data.fromLocation,
-        to: data.toLocation,
-        timestamp: new Date().toISOString()
-      };
-
-      // Create the ticket
-      const { data: ticket, error } = await supabase
+      // Create the ticket in database
+      const { data, error } = await supabase
         .from('tickets')
         .insert({
-          conductor_id: conductorId,
-          assignment_id: data.assignmentId,
-          passenger_name: data.passengerName,
-          passenger_id: data.passengerId,
-          passenger_type: data.ticketType,
-          seat_number: data.seatNumber,
-          from_location: data.fromLocation,
-          to_location: data.toLocation,
-          amount: data.fare,
-          payment_method: data.paymentMethod,
-          payment_status: 'paid',
+          id,
+          ticket_number,
+          created_at: now,
           status: 'active',
-          qr_code: JSON.stringify(qrData)
+          ...ticketData
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error creating ticket:', error);
+        throw new Error(`Failed to create ticket: ${error.message}`);
+      }
 
-      // Record the activity
-      await supabase.from('conductor_activities').insert({
-        type: 'ticket_issued',
-        conductor_id: conductorId,
-        assignment_id: data.assignmentId,
-        ticket_id: ticket.id,
-        details: {
-          ticket_type: data.ticketType,
-          amount: data.fare,
-          payment_method: data.paymentMethod,
-          passenger_name: data.passengerName,
-          seat_number: data.seatNumber
-        }
-      });
-
-      return ticket;
+      return data;
     } catch (error) {
       console.error('Error issuing ticket:', error);
       throw error;

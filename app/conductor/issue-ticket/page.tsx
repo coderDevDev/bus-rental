@@ -306,67 +306,68 @@ export default function IssueTicket() {
   };
 
   const handleIssueTicket = async () => {
-    if (!user || !currentAssignment || !routeDetails) return;
-
-    // Validate required fields
-    const requiredFields: Record<
-      keyof Pick<FormData, 'passengerName' | 'from' | 'to' | 'ticketType'>,
-      string
-    > = {
-      passengerName: 'Passenger name',
-      from: 'Pickup point',
-      to: 'Destination',
-      ticketType: 'Ticket type'
-    };
-
-    const missingFields = Object.entries(requiredFields)
-      .filter(([key]) => !formData[key as keyof FormData])
-      .map(([_, label]) => label);
-
-    if (missingFields.length > 0) {
-      toast({
-        title: 'Required Fields Missing',
-        description: `Please enter: ${missingFields.join(', ')}`,
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    // Validate seat selection if bus has capacity
-    if (currentAssignment?.bus?.capacity && !formData.seatNumber) {
-      toast({
-        title: 'Seat Selection Required',
-        description: 'Please select a seat for the passenger',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-
     try {
-      const ticket = await conductorDashboardService.issueTicket({
-        conductorId: user.id,
-        assignmentId: currentAssignment.id,
-        fromLocation: formData.from,
-        toLocation: formData.to,
-        ticketType: formData.ticketType as 'regular' | 'student' | 'senior',
-        fare: getTicketPrice(),
-        paymentMethod: formData.paymentMethod as 'cash' | 'card',
-        passengerName: formData.passengerName,
-        seatNumber: formData.seatNumber || undefined,
-        passengerId: formData.passengerId || undefined
+      setIsSubmitting(true);
+
+      // Validate required fields
+      console.log({ formData });
+      if (
+        !formData.passengerName ||
+        !formData.from ||
+        !formData.to ||
+        !formData.seatNumber
+      ) {
+        toast({
+          title: 'Missing Information',
+          description: 'Please fill in all required fields',
+          variant: 'destructive'
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Make sure we have the assignment ID
+      if (!currentAssignment?.id) {
+        toast({
+          title: 'No Active Assignment',
+          description: 'You need an active route assignment to issue tickets',
+          variant: 'destructive'
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const conductorId = await conductorDashboardService.getConductorId(
+        user.id
+      );
+      console.log('Issuing ticket with data:', {
+        ...formData,
+        assignment_id: currentAssignment.id,
+        conductor_id: conductorId
       });
 
-      // Update taken seats list after successful ticket issuance
-      setTakenSeats(prev => [...prev, formData.seatNumber]);
+      // Call the service to issue the ticket
+      const ticket = await conductorDashboardService.issueTicket({
+        passenger_name: formData.passengerName,
+        passenger_type: formData.ticketType,
+        seat_number: formData.seatNumber,
+        from_location: formData.from,
+        to_location: formData.to,
+        amount: getTicketPrice(),
+        payment_method: formData.paymentMethod,
+        assignment_id: currentAssignment.id,
+        conductor_id: conductorId
+      });
+
+      // Successful ticket creation
+      console.log('Ticket created successfully:', ticket);
 
       toast({
-        title: 'Success',
-        description: `Ticket #${ticket.id} has been issued successfully`
+        title: 'Ticket Issued',
+        description: `Ticket #${ticket.ticket_number} has been issued successfully`
       });
 
-      // Reset form for next ticket
+      // Reset form or navigate back
       setFormData({
         ticketType: 'regular',
         from: currentAssignment.route.start_location,
@@ -380,10 +381,54 @@ export default function IssueTicket() {
       router.push('/conductor');
     } catch (error) {
       console.error('Error issuing ticket:', error);
+
+      let errorMessage = 'Failed to issue ticket. Please try again.';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
       toast({
         title: 'Error',
-        description:
-          error instanceof Error ? error.message : 'Failed to issue ticket',
+        description: errorMessage,
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Add a debug function to test ticket creation directly
+  const testTicketCreation = async () => {
+    try {
+      setIsSubmitting(true);
+
+      // Create a test ticket with minimal data
+      const testTicket = {
+        passenger_name: 'Test Passenger',
+        passenger_type: 'regular',
+        seat_number: 'A1',
+        from_location: 'Manila',
+        to_location: 'Cebu',
+        amount: 500,
+        payment_method: 'cash',
+        assignment_id: currentAssignment?.id || '',
+        conductor_id: user.id || ''
+      };
+
+      console.log('Creating test ticket with:', testTicket);
+
+      const result = await conductorDashboardService.issueTicket(testTicket);
+      console.log('Test ticket created:', result);
+
+      toast({
+        title: 'Test Ticket Created',
+        description: `Ticket #${result.ticket_number} created for testing`
+      });
+    } catch (error) {
+      console.error('Test ticket creation failed:', error);
+      toast({
+        title: 'Test Failed',
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive'
       });
     } finally {
@@ -666,7 +711,7 @@ export default function IssueTicket() {
               onClick={handleIssueTicket}
               disabled={isSubmitting}>
               <Printer className="h-4 w-4" />
-              {isSubmitting ? 'Processing...' : 'Print Ticket'}
+              {isSubmitting ? 'Processing...' : 'Save Ticket'}
             </Button>
             {formData.paymentMethod === 'card' && (
               <Button
