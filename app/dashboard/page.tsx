@@ -28,7 +28,8 @@ import type {
   Ticket,
   Location,
   SearchFormData,
-  BookingData
+  BookingData,
+  User
 } from '@/types';
 import { NotificationPreferences } from './components/notification-preferences';
 import { PassengerProfile } from './components/passenger-profile';
@@ -52,8 +53,18 @@ export default function PassengerDashboard() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [activeTab, setActiveTab] = useState('search');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const savedTab = localStorage.getItem('dashboardActiveTab');
+      return savedTab || 'search';
+    }
+    return 'search';
+  });
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('dashboardActiveTab', activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -62,9 +73,18 @@ export default function PassengerDashboard() {
         setLoading(true);
         const data = await passengerService.getDashboardData(user.id);
 
+        // Filter out cancelled tickets from statistics
+        const activeTickets = data.tickets.filter(
+          ticket => ticket.status !== 'cancelled'
+        );
+
+        console.log({ activeTickets });
         setStats({
-          total_trips: data.stats.total_trips,
-          total_spent: data.stats.total_spent,
+          total_trips: activeTickets.length,
+          total_spent: activeTickets.reduce(
+            (sum, ticket) => sum + (ticket.amount || 0),
+            0
+          ),
           total_distance: data.stats.total_distance
         });
 
@@ -191,7 +211,7 @@ export default function PassengerDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PassengerHeader user={user} />
+      <PassengerHeader user={user as User | null} />
 
       <main className="container py-6 px-4 space-y-6">
         {/* Stats Overview */}
@@ -245,10 +265,10 @@ export default function PassengerDashboard() {
               <Clock className="h-4 w-4 mr-2" />
               History
             </TabsTrigger>
-            <TabsTrigger value="notifications">
+            {/* <TabsTrigger value="notifications">
               <Bell className="h-4 w-4 mr-2" />
               Notifications
-            </TabsTrigger>
+            </TabsTrigger> */}
           </TabsList>
 
           <TabsContent value="search" className="mt-6">

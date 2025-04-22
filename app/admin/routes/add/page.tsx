@@ -33,6 +33,21 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog';
+import mapboxgl from 'mapbox-gl';
+import mapboxSdk from '@mapbox/mapbox-sdk';
+import directionsService from '@mapbox/mapbox-sdk/services/directions';
+
+// Setup Mapbox client
+// You'll need to store your Mapbox token in an environment variable
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+mapboxgl.accessToken = MAPBOX_TOKEN;
+
+// Initialize the Mapbox SDK client
+const mapboxClient = mapboxSdk({ accessToken: MAPBOX_TOKEN });
+const directionsClient = directionsService(mapboxClient);
+
+// Add this near the top to verify MAPBOX_TOKEN is available
+console.log('Mapbox token available:', !!MAPBOX_TOKEN);
 
 export default function AddRoutePage() {
   const router = useRouter();
@@ -59,6 +74,10 @@ export default function AddRoutePage() {
     latitude: 0,
     longitude: 0
   });
+
+  // Add these states to track calculation
+  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+  const [calculationError, setCalculationError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadLocations = async () => {
@@ -100,27 +119,29 @@ export default function AddRoutePage() {
     setIsSubmitting(true);
 
     try {
-      // Validate required fields
-      if (!formData.name || !formData.from_location || !formData.to_location) {
+      // Find the location objects from their IDs
+      const fromLocation = locations.find(l => l.id === formData.from_location);
+      const toLocation = locations.find(l => l.id === formData.to_location);
+
+      if (!fromLocation || !toLocation) {
         toast({
           title: 'Validation Error',
-          description: 'Please fill in all required fields',
+          description: 'Selected locations are invalid',
           variant: 'destructive'
         });
         return;
       }
 
-      // Validate locations are different
-      if (formData.from_location === formData.to_location) {
-        toast({
-          title: 'Validation Error',
-          description: 'Start and end locations must be different',
-          variant: 'destructive'
-        });
-        return;
-      }
+      // Create the route data with Location objects
+      const routeData = {
+        ...formData,
+        from_location: fromLocation, // Replace ID with Location object
+        to_location: toLocation // Replace ID with Location object
+      };
 
-      await routeService.createRoute(formData);
+      await routeService.createRoute(routeData);
+      // close the modal
+      setIsAddingLocation(false);
       toast({
         title: 'Success',
         description: 'Route added successfully'
@@ -140,7 +161,7 @@ export default function AddRoutePage() {
 
   const handleAddLocation = async () => {
     try {
-      setIsAddingLocation(true);
+      // setIsAddingLocation(true);
       const createdLocation = await routeService.createLocation(newLocation);
       setLocations(prev => [...prev, createdLocation]);
       toast({
@@ -158,6 +179,178 @@ export default function AddRoutePage() {
       return null;
     } finally {
       setIsAddingLocation(false);
+    }
+  };
+
+  // Add this helper function to calculate distance using Haversine formula
+  const calculateDistance = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ): number => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) *
+        Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c; // Distance in km
+    return parseFloat(distance.toFixed(2));
+  };
+
+  // Add this function to estimate duration based on distance
+  const estimateDuration = (distance: number): number => {
+    // Assuming average speed of 40 km/h for buses
+    const averageSpeedKmh = 40;
+    const timeHours = distance / averageSpeedKmh;
+    const timeMinutes = Math.ceil(timeHours * 60); // Round up to nearest minute
+    return timeMinutes;
+  };
+
+  // Replace the current useEffect with this enhanced version
+  useEffect(() => {
+    console.log('Location selection changed:', {
+      from: formData.from_location,
+      to: formData.to_location,
+      fromLocation: locations.find(l => l.id === formData.from_location),
+      toLocation: locations.find(l => l.id === formData.to_location)
+    });
+
+    // Only calculate if both locations are selected and user hasn't manually entered values
+    if (
+      formData.from_location &&
+      formData.to_location &&
+      (formData.distance === 0 || formData.estimated_duration === 0)
+    ) {
+      const fromLocation = locations.find(l => l.id === formData.from_location);
+      const toLocation = locations.find(l => l.id === formData.to_location);
+
+      if (fromLocation && toLocation) {
+        console.log(
+          'Attempting to calculate route between:',
+          fromLocation,
+          toLocation
+        );
+        calculateRouteWithMapbox(fromLocation, toLocation);
+      }
+    }
+  }, [
+    formData.from_location,
+    formData.to_location,
+    locations,
+    formData.distance,
+    formData.estimated_duration
+  ]);
+
+  // Add this function to calculate route using Mapbox
+  const calculateRouteWithMapbox = async (
+    fromLocation: Location,
+    toLocation: Location
+  ) => {
+    try {
+      setIsCalculatingRoute(true);
+      setCalculationError(null);
+
+      // Ensure we have valid coordinates
+      if (
+        !fromLocation.latitude ||
+        !fromLocation.longitude ||
+        !toLocation.latitude ||
+        !toLocation.longitude
+      ) {
+        throw new Error('Invalid location coordinates');
+      }
+
+      // First check if the straight-line distance is likely to exceed Mapbox's limit
+      const straightLineDistance = calculateDistance(
+        fromLocation.latitude,
+        fromLocation.longitude,
+        toLocation.latitude,
+        toLocation.longitude
+      );
+
+      // If the straight-line distance is already over 350km, don't even try the API call
+      // (Using 350km as a safety margin below the ~400km API limit)
+      if (straightLineDistance > 350) {
+        throw new Error('Distance exceeds Mapbox API limitations (400km max)');
+      }
+
+      // Call Mapbox Directions API
+      const response = await directionsClient
+        .getDirections({
+          profile: 'driving-traffic', // Use 'driving-traffic' for most accurate bus travel times
+          waypoints: [
+            { coordinates: [fromLocation.longitude, fromLocation.latitude] },
+            { coordinates: [toLocation.longitude, toLocation.latitude] }
+          ],
+          geometries: 'geojson'
+        })
+        .send();
+
+      if (response && response.body.routes && response.body.routes.length > 0) {
+        const route = response.body.routes[0];
+
+        // Get distance in kilometers (Mapbox returns distance in meters)
+        const distance = parseFloat((route.distance / 1000).toFixed(2));
+
+        // Get duration in minutes (Mapbox returns duration in seconds)
+        // For bus routes, add 20% to the normal driving time to account for stops
+        const durationSeconds = route.duration * 1.2;
+        const duration = Math.ceil(durationSeconds / 60);
+
+        // Update form data
+        setFormData(prev => ({
+          ...prev,
+          distance: prev.distance === 0 ? distance : prev.distance,
+          estimated_duration:
+            prev.estimated_duration === 0 ? duration : prev.estimated_duration
+        }));
+      } else {
+        throw new Error('No route found between locations');
+      }
+    } catch (error) {
+      console.error('Error calculating route:', error);
+
+      // Check if the error is related to the distance limitation
+      let errorMessage = 'Failed to calculate route';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        if (
+          errorMessage.includes('exceeds maximum distance') ||
+          errorMessage.includes('exceeds Mapbox API limitations')
+        ) {
+          errorMessage = 'Route distance exceeds Mapbox API limit of 400km';
+        }
+      }
+
+      setCalculationError(errorMessage);
+
+      // Fall back to Haversine calculation for any error
+      const distance = calculateDistance(
+        fromLocation.latitude,
+        fromLocation.longitude,
+        toLocation.latitude,
+        toLocation.longitude
+      );
+
+      // For the fallback, use a lower average speed for long distances
+      // to get a more realistic time estimate
+      const averageSpeed = distance > 100 ? 60 : 40; // 60 km/h for highways, 40 km/h for local routes
+      const duration = Math.ceil((distance / averageSpeed) * 60); // Convert to minutes
+
+      setFormData(prev => ({
+        ...prev,
+        distance: prev.distance === 0 ? distance : prev.distance,
+        estimated_duration:
+          prev.estimated_duration === 0 ? duration : prev.estimated_duration
+      }));
+    } finally {
+      setIsCalculatingRoute(false);
     }
   };
 
@@ -215,7 +408,9 @@ export default function AddRoutePage() {
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <Label htmlFor="from_location">From Location</Label>
-                    <Dialog>
+                    <Dialog
+                      open={isAddingLocation}
+                      onOpenChange={setIsAddingLocation}>
                       <DialogTrigger asChild>
                         <Button variant="ghost" size="sm">
                           <PlusCircle className="h-4 w-4 mr-2" />
@@ -255,7 +450,7 @@ export default function AddRoutePage() {
                               placeholder="Enter state/province"
                             />
                           </div>
-                          <div className="space-y-2">
+                          {/* <div className="space-y-2">
                             <Label htmlFor="country">Country</Label>
                             <Input
                               id="country"
@@ -268,7 +463,7 @@ export default function AddRoutePage() {
                               }
                               placeholder="Enter country"
                             />
-                          </div>
+                          </div> */}
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label htmlFor="latitude">Latitude</Label>
@@ -304,18 +499,28 @@ export default function AddRoutePage() {
                         </div>
                         <Button
                           onClick={handleAddLocation}
-                          disabled={isAddingLocation}
+                          // disabled={isAddingLocation}
                           className="w-full">
-                          {isAddingLocation ? 'Adding...' : 'Add Location'}
+                          {/* {isAddingLocation ? 'Adding...' : 'Add Location'} */}
+                          Add Location
                         </Button>
                       </DialogContent>
                     </Dialog>
                   </div>
                   <Select
                     value={formData.from_location}
-                    onValueChange={value =>
-                      setFormData(prev => ({ ...prev, from_location: value }))
-                    }>
+                    onValueChange={value => {
+                      console.log('From location changed to:', value);
+                      setFormData(prev => ({
+                        ...prev,
+                        from_location: value,
+                        // Reset distance and duration when changing location to ensure recalculation
+                        ...(prev.distance === 0 && { distance: 0 }),
+                        ...(prev.estimated_duration === 0 && {
+                          estimated_duration: 0
+                        })
+                      }));
+                    }}>
                     <SelectTrigger id="from_location">
                       <SelectValue placeholder="Select starting location" />
                     </SelectTrigger>
@@ -332,9 +537,18 @@ export default function AddRoutePage() {
                   <Label htmlFor="to_location">To Location</Label>
                   <Select
                     value={formData.to_location}
-                    onValueChange={value =>
-                      setFormData(prev => ({ ...prev, to_location: value }))
-                    }>
+                    onValueChange={value => {
+                      console.log('To location changed to:', value);
+                      setFormData(prev => ({
+                        ...prev,
+                        to_location: value,
+                        // Reset distance and duration when changing location to ensure recalculation
+                        ...(prev.distance === 0 && { distance: 0 }),
+                        ...(prev.estimated_duration === 0 && {
+                          estimated_duration: 0
+                        })
+                      }));
+                    }}>
                     <SelectTrigger id="to_location">
                       <SelectValue placeholder="Select destination" />
                     </SelectTrigger>
@@ -349,30 +563,72 @@ export default function AddRoutePage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="distance">Distance (km)</Label>
-                  <Input
-                    id="distance"
-                    name="distance"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={formData.distance}
-                    onChange={handleChange}
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      id="distance"
+                      name="distance"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={formData.distance}
+                      onChange={handleChange}
+                      placeholder="Auto-calculated from locations"
+                      required
+                    />
+                    {isCalculatingRoute && (
+                      <div className="absolute right-3 top-2.5">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-maroon-700 border-t-transparent"></div>
+                      </div>
+                    )}
+                  </div>
+                  {formData.from_location &&
+                    formData.to_location &&
+                    formData.distance === 0 &&
+                    !isCalculatingRoute && (
+                      <p className="text-xs text-muted-foreground">
+                        Will be automatically calculated when both locations are
+                        selected
+                      </p>
+                    )}
+                  {calculationError && (
+                    <p className="text-xs text-red-500">
+                      {calculationError}.{' '}
+                      {calculationError.includes('limit')
+                        ? 'Using straight-line distance with highway speed estimates.'
+                        : 'Using straight-line distance instead.'}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="estimated_duration">
                     Estimated Duration (minutes)
                   </Label>
-                  <Input
-                    id="estimated_duration"
-                    name="estimated_duration"
-                    type="number"
-                    min="0"
-                    value={formData.estimated_duration}
-                    onChange={handleChange}
-                    required
-                  />
+                  <div className="relative">
+                    <Input
+                      id="estimated_duration"
+                      name="estimated_duration"
+                      type="number"
+                      min="0"
+                      value={formData.estimated_duration}
+                      onChange={handleChange}
+                      placeholder="Auto-calculated from distance"
+                      required
+                    />
+                    {isCalculatingRoute && (
+                      <div className="absolute right-3 top-2.5">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-maroon-700 border-t-transparent"></div>
+                      </div>
+                    )}
+                  </div>
+                  {formData.from_location &&
+                    formData.to_location &&
+                    formData.estimated_duration === 0 &&
+                    !isCalculatingRoute && (
+                      <p className="text-xs text-muted-foreground">
+                        Will be automatically calculated based on road distance
+                        and traffic conditions
+                      </p>
+                    )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="base_fare">Base Fare (₱)</Label>

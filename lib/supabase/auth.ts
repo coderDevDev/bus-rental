@@ -236,3 +236,60 @@ export function redirectBasedOnRole(role: Role | null) {
       redirect('/');
   }
 }
+
+/**
+ * Request a password reset email for the specified email address
+ */
+export async function resetPasswordForEmail(email: string): Promise<void> {
+  // Get the full origin URL
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const redirectUrl = `${origin}/reset-password`;
+
+  console.log('Sending reset email with redirect to:', redirectUrl);
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: redirectUrl
+  });
+
+  if (error) {
+    console.error('Error sending password reset email:', error);
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Update the user's password with a valid reset token
+ */
+export async function updatePassword(
+  accessToken: string,
+  newPassword: string
+): Promise<void> {
+  try {
+    console.log(
+      'Updating password with token:',
+      accessToken ? 'Token present' : 'No token'
+    );
+
+    // This approach doesn't require setting the session first
+    // Instead, we directly use the updateUser API with the token
+    const { data, error } = await supabase.auth.updateUser(
+      {
+        password: newPassword
+      },
+      {
+        // Pass the access token in the options
+        accessToken: accessToken
+      }
+    );
+
+    if (error) {
+      console.error('Error updating password:', error);
+      throw new Error(error.message);
+    }
+
+    console.log('Password updated successfully:', data);
+  } catch (error) {
+    console.error('Password update error:', error);
+    throw error;
+  }
+}

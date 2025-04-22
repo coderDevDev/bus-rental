@@ -2,7 +2,7 @@
 
 import type React from 'react';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,6 +32,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { signUpSchema, type SignUpFormData } from './schema';
+import { locationService } from '@/lib/location-service';
+
+type Region = { id: string; name: string; code: string };
+type Province = { id: string; name: string; region_code: string; code: string };
+type City = { id: string; name: string; province_code: string; code: string };
+type Barangay = { id: string; name: string; city_code: string; code: string };
 
 export default function SignUp() {
   const router = useRouter();
@@ -39,6 +45,16 @@ export default function SignUp() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [provinces, setProvinces] = useState<Province[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
+  const [barangays, setBarangays] = useState<Barangay[]>([]);
+
+  const [selectedRegion, setSelectedRegion] = useState<string>('');
+  const [selectedProvince, setSelectedProvince] = useState<string>('');
+  const [selectedCity, setSelectedCity] = useState<string>('');
+  const [selectedBarangay, setSelectedBarangay] = useState<string>('');
 
   const form = useForm<SignUpFormData>({
     resolver: zodResolver(signUpSchema),
@@ -59,18 +75,174 @@ export default function SignUp() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-    watch
+    watch,
+    setValue
   } = form;
+
+  useEffect(() => {
+    const loadRegions = async () => {
+      try {
+        const regionList = await locationService.getRegions();
+        setRegions(regionList);
+      } catch (error) {
+        console.error('Failed to load regions:', error);
+      }
+    };
+
+    loadRegions();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedRegion) {
+      setProvinces([]);
+      return;
+    }
+
+    const loadProvinces = async () => {
+      try {
+        const provinceList = await locationService.getProvinces(selectedRegion);
+        setProvinces(provinceList);
+        setSelectedProvince('');
+        setCities([]);
+        setBarangays([]);
+      } catch (error) {
+        console.error('Failed to load provinces:', error);
+      }
+    };
+
+    loadProvinces();
+  }, [selectedRegion]);
+
+  useEffect(() => {
+    if (!selectedProvince) {
+      setCities([]);
+      return;
+    }
+
+    const loadCities = async () => {
+      try {
+        const cityList = await locationService.getCities(selectedProvince);
+        setCities(cityList);
+        setSelectedCity('');
+        setBarangays([]);
+      } catch (error) {
+        console.error('Failed to load cities:', error);
+      }
+    };
+
+    loadCities();
+  }, [selectedProvince]);
+
+  useEffect(() => {
+    if (!selectedCity) {
+      setBarangays([]);
+      return;
+    }
+
+    const loadBarangays = async () => {
+      try {
+        const barangayList = await locationService.getBarangays(selectedCity);
+        setBarangays(barangayList);
+        setSelectedBarangay('');
+      } catch (error) {
+        console.error('Failed to load barangays:', error);
+      }
+    };
+
+    loadBarangays();
+  }, [selectedCity]);
+
+  useEffect(() => {
+    if (selectedRegion) {
+      const region = regions.find(r => r.code === selectedRegion);
+      if (region) {
+        setValue('regionCode', region.code);
+        setValue('regionName', region.name);
+      }
+    }
+  }, [selectedRegion, regions, setValue]);
+
+  useEffect(() => {
+    if (selectedProvince) {
+      const province = provinces.find(p => p.code === selectedProvince);
+      if (province) {
+        setValue('provinceCode', province.code);
+        setValue('provinceName', province.name);
+      }
+    }
+  }, [selectedProvince, provinces, setValue]);
+
+  useEffect(() => {
+    if (selectedCity) {
+      const city = cities.find(c => c.code === selectedCity);
+      if (city) {
+        setValue('cityCode', city.code);
+        setValue('cityName', city.name);
+      }
+    }
+  }, [selectedCity, cities, setValue]);
+
+  useEffect(() => {
+    if (selectedBarangay) {
+      const barangay = barangays.find(b => b.code === selectedBarangay);
+      if (barangay) {
+        setValue('barangayCode', barangay.code);
+        setValue('barangayName', barangay.name);
+      }
+    }
+  }, [selectedBarangay, barangays, setValue]);
 
   const onSubmit = async (data: SignUpFormData) => {
     try {
+      // Format the address from all fields for display
+      const formattedAddress = [
+        data.houseNumber,
+        data.street,
+        selectedBarangay
+          ? barangays.find(b => b.code === selectedBarangay)?.name
+          : '',
+        selectedCity ? cities.find(c => c.code === selectedCity)?.name : '',
+        selectedProvince
+          ? provinces.find(p => p.code === selectedProvince)?.name
+          : '',
+        selectedRegion
+          ? regions.find(r => r.code === selectedRegion)?.name
+          : '',
+        data.postalCode
+      ]
+        .filter(Boolean)
+        .join(', ');
+
+      // Get the names for selected location codes
+      const regionName =
+        regions.find(r => r.code === selectedRegion)?.name || '';
+      const provinceName =
+        provinces.find(p => p.code === selectedProvince)?.name || '';
+      const cityName = cities.find(c => c.code === selectedCity)?.name || '';
+      const barangayName =
+        barangays.find(b => b.code === selectedBarangay)?.name || '';
+
       // Sign up with Supabase including additional metadata
-      await signUp(data.email, data.password, data.role, {
+      await signUp(data.email, data.password, 'passenger', {
         name: data.name,
         phone: data.phone,
-        address: data.address,
+        address: formattedAddress, // Use the formatted address for display
         birthdate: data.birthdate,
-        gender: data.gender
+        gender: data.gender,
+        // Store address components for future reference
+        addressDetails: {
+          houseNumber: data.houseNumber || '',
+          street: data.street || '',
+          regionCode: selectedRegion,
+          regionName,
+          provinceCode: selectedProvince,
+          provinceName,
+          cityCode: selectedCity,
+          cityName,
+          barangayCode: selectedBarangay,
+          barangayName,
+          postalCode: data.postalCode || ''
+        }
       });
 
       toast({
@@ -140,7 +312,7 @@ export default function SignUp() {
                   <Input
                     {...register('phone')}
                     type="tel"
-                    placeholder="+639"
+                    placeholder="09XXXXXXXXX or +639XXXXXXXXX"
                     className="pl-10"
                   />
                   <Phone className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
@@ -164,7 +336,7 @@ export default function SignUp() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="gender">Gender</Label>
-                <Select {...register('gender')} className="w-full">
+                <Select {...register('gender')}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -180,17 +352,129 @@ export default function SignUp() {
                   </p>
                 )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
-                <Textarea
-                  {...register('address')}
-                  placeholder="Enter your address"
-                />
-                {errors.address && (
-                  <p className="text-sm text-red-500">
-                    {errors.address.message}
-                  </p>
-                )}
+              <div className="space-y-4 border p-4 rounded-md">
+                <h3 className="font-medium">Address Details</h3>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="houseNumber">House/Unit Number</Label>
+                    <Input
+                      {...register('houseNumber')}
+                      id="houseNumber"
+                      placeholder="e.g. 123"
+                    />
+                    {errors.houseNumber && (
+                      <p className="text-sm text-red-500">
+                        {errors.houseNumber.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="street">Street Name</Label>
+                    <Input
+                      {...register('street')}
+                      id="street"
+                      placeholder="e.g. Main Street"
+                    />
+                    {errors.street && (
+                      <p className="text-sm text-red-500">
+                        {errors.street.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="region">Region</Label>
+                  <Select
+                    value={selectedRegion}
+                    onValueChange={value => setSelectedRegion(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a region" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {regions.map(region => (
+                        <SelectItem key={region.code} value={region.code}>
+                          {region.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="province">Province</Label>
+                  <Select
+                    value={selectedProvince}
+                    onValueChange={value => setSelectedProvince(value)}
+                    disabled={!selectedRegion}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a province" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {provinces.map(province => (
+                        <SelectItem key={province.code} value={province.code}>
+                          {province.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="city">City/Municipality</Label>
+                  <Select
+                    value={selectedCity}
+                    onValueChange={value => setSelectedCity(value)}
+                    disabled={!selectedProvince}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a city" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cities.map(city => (
+                        <SelectItem key={city.code} value={city.code}>
+                          {city.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="barangay">Barangay</Label>
+                  <Select
+                    value={selectedBarangay}
+                    onValueChange={value => setSelectedBarangay(value)}
+                    disabled={!selectedCity}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a barangay" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {barangays.map(barangay => (
+                        <SelectItem key={barangay.code} value={barangay.code}>
+                          {barangay.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="postalCode">Postal Code</Label>
+                    <Input
+                      {...register('postalCode')}
+                      id="postalCode"
+                      placeholder="e.g. 1000"
+                    />
+                    {errors.postalCode && (
+                      <p className="text-sm text-red-500">
+                        {errors.postalCode.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -261,7 +545,7 @@ export default function SignUp() {
                   </p>
                 )}
               </div>
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <Label>Account Type</Label>
                 <RadioGroup
                   {...register('role')}
@@ -279,7 +563,7 @@ export default function SignUp() {
                     <Label htmlFor="admin">Admin</Label>
                   </div>
                 </RadioGroup>
-              </div>
+              </div> */}
               <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isSubmitting ? 'Creating Account...' : 'Create Account'}
               </Button>

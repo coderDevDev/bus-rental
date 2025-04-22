@@ -10,7 +10,15 @@ import {
   AccordionItem,
   AccordionTrigger
 } from '@/components/ui/accordion';
-import { Search, HelpCircle, MessageCircle, Phone } from 'lucide-react';
+import {
+  Search,
+  HelpCircle,
+  MessageCircle,
+  Phone,
+  ArrowLeft
+} from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 const FAQs = [
   {
@@ -36,6 +44,7 @@ const FAQs = [
 ];
 
 export function HelpCenter() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredFAQs, setFilteredFAQs] = useState(FAQs);
 
@@ -50,7 +59,15 @@ export function HelpCenter() {
   return (
     <>
       <header className="border-b sticky top-0 bg-maroon-700 text-white z-10">
-        <div className="container flex h-14 items-center justify-between px-4">
+        <div className="container flex h-14 items-center px-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="mr-2 text-white"
+            onClick={() => router.back()}>
+            <ArrowLeft className="h-5 w-5" />
+            <span className="sr-only">Go back</span>
+          </Button>
           <h1 className="font-bold text-lg">NorthPoint</h1>
         </div>
       </header>

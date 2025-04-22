@@ -35,14 +35,19 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Route, Bus, Conductor, Assignment } from '@/types';
 
-const formSchema = z.object({
-  route_id: z.string().min(1, 'Route is required'),
-  bus_id: z.string().min(1, 'Bus is required'),
-  conductor_id: z.string().min(1, 'Conductor is required'),
-  start_date: z.string().min(1, 'Start date is required'),
-  end_date: z.string().min(1, 'End date is required'),
-  status: z.enum(['active', 'scheduled', 'completed', 'cancelled'])
-});
+const formSchema = z
+  .object({
+    route_id: z.string().min(1, 'Route is required'),
+    bus_id: z.string().min(1, 'Bus is required'),
+    conductor_id: z.string().min(1, 'Conductor is required'),
+    start_date: z.string().min(1, 'Start date is required'),
+    end_date: z.string().min(1, 'End date is required'),
+    status: z.enum(['active', 'completed', 'cancelled'])
+  })
+  .refine(data => new Date(data.end_date) > new Date(data.start_date), {
+    message: 'End date must be after start date',
+    path: ['end_date']
+  });
 
 export default function EditAssignmentPage({
   params
@@ -72,6 +77,8 @@ export default function EditAssignmentPage({
             adminService.getBuses(),
             adminService.getConductors()
           ]);
+
+        console.log('Loaded conductors:', conductorsData);
 
         setAssignment(assignmentData);
         setRoutes(routesData);
@@ -104,7 +111,37 @@ export default function EditAssignmentPage({
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      await assignmentService.updateAssignment(params.id, values);
+      // Parse dates for validation and formatting
+      const startDateObj = new Date(values.start_date);
+      const endDateObj = new Date(values.end_date);
+
+      // Validate that end date is after start date
+      if (endDateObj <= startDateObj) {
+        toast({
+          title: 'Validation Error',
+          description: 'End date must be after start date',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Format dates properly for PostgreSQL
+      const startDate = startDateObj.toISOString();
+      const endDate = endDateObj.toISOString();
+
+      // Create update object with valid dates
+      const updateData: Partial<Assignment> = {
+        route_id: values.route_id,
+        bus_id: values.bus_id,
+        conductor_id: values.conductor_id,
+        start_date: startDate,
+        end_date: endDate,
+        status: values.status
+      };
+
+      console.log('Sending update with datass:', updateData);
+
+      await assignmentService.updateAssignment(params.id, updateData);
       toast({
         title: 'Success',
         description: 'Assignment updated successfully'
@@ -208,7 +245,7 @@ export default function EditAssignmentPage({
                       <SelectContent>
                         {conductors.map(conductor => (
                           <SelectItem key={conductor.id} value={conductor.id}>
-                            {conductor.name}
+                            {conductor.user?.name || conductor.conductor_id}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -232,7 +269,6 @@ export default function EditAssignmentPage({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="scheduled">Scheduled</SelectItem>
                         <SelectItem value="completed">Completed</SelectItem>
                         <SelectItem value="cancelled">Cancelled</SelectItem>
                       </SelectContent>

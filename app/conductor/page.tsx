@@ -285,13 +285,18 @@ export default function ConductorDashboard() {
         const conductorId = await conductorDashboardService.getConductorId(
           user.id
         );
-        await conductorDashboardService.updateLocation({
-          conductor_id: conductorId,
-          assignment_id: currentAssignment.id,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          heading: location.heading
-        });
+
+        console.log({ conductorId, currentAssignment: currentAssignment.id });
+
+        if (conductorId && currentAssignment.id) {
+          await conductorDashboardService.updateLocation({
+            conductor_id: conductorId,
+            assignment_id: currentAssignment.id,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            heading: location.heading
+          });
+        }
         setLastUpdateTime(now);
       } catch (error) {
         console.error('Error updating location:', error);
@@ -500,6 +505,104 @@ export default function ConductorDashboard() {
     [loadDashboardData]
   );
 
+  // Inside useEffect for location updates
+  useEffect(() => {
+    // Function to get position from browser
+    const updateCurrentLocation = () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          position => {
+            const newLocation = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              heading: position.coords.heading || 0,
+              timestamp: new Date().toISOString()
+            };
+
+            setCurrentLocation(newLocation);
+
+            // Also save to localStorage as backup
+            localStorage.setItem(
+              'conductorLocation',
+              JSON.stringify(newLocation)
+            );
+
+            // Call API to update server-side location data if needed
+            if (currentAssignment) {
+              conductorDashboardService
+                .updateLocation({
+                  conductor_id: selectedConductorId,
+                  assignment_id: currentAssignment.id,
+                  latitude: newLocation.latitude,
+                  longitude: newLocation.longitude,
+                  heading: newLocation.heading
+                })
+                .catch(err =>
+                  console.error('Failed to update location on server:', err)
+                );
+            }
+          },
+          error => {
+            console.error('Geolocation error:', error);
+            // Try to get last known position from localStorage
+            const lastKnownLocation = localStorage.getItem('conductorLocation');
+            if (lastKnownLocation) {
+              setCurrentLocation(JSON.parse(lastKnownLocation));
+            }
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 5000
+          }
+        );
+      }
+    };
+
+    // Update location immediately
+    updateCurrentLocation();
+
+    // Set up interval for regular updates
+    const locationInterval = setInterval(updateCurrentLocation, 15000); // every 15 seconds
+
+    return () => {
+      clearInterval(locationInterval);
+    };
+  }, [currentAssignment]);
+
+  // For testing/demo purposes only - simulates a moving vehicle
+  // Add this inside your component
+  const simulateMovement = useCallback(() => {
+    if (!currentLocation || !routeDetails) return;
+
+    // Get start and end coordinates
+    const startLat = routeDetails.from_location.latitude || 14.5995;
+    const startLng = routeDetails.from_location.longitude || 120.9842;
+    const endLat = routeDetails.to_location.latitude || 10.3157;
+    const endLng = routeDetails.to_location.longitude || 123.8854;
+
+    // Calculate a point along the route based on time
+    const progress = (Date.now() % 300000) / 300000; // 0-1 value cycling every 5 minutes
+    const newLat = startLat + (endLat - startLat) * progress;
+    const newLng = startLng + (endLng - startLng) * progress;
+
+    setCurrentLocation({
+      latitude: newLat,
+      longitude: newLng,
+      heading: 0,
+      timestamp: new Date().toISOString()
+    });
+  }, [currentLocation, routeDetails]);
+
+  // Add another useEffect for the simulation
+  useEffect(() => {
+    // Only use in development/testing
+    if (process.env.NODE_ENV === 'development') {
+      const interval = setInterval(simulateMovement, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [simulateMovement]);
+
   if (!isLoaded || !user) {
     return (
       <div className="flex flex-col min-h-screen">
@@ -652,6 +755,7 @@ export default function ConductorDashboard() {
                 <CardTitle className="text-lg">Live Route Tracking</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
+                {console.log({ mapData })}
                 {mapData && (
                   <RouteMap
                     startLocation={mapData.startLocation}

@@ -91,7 +91,8 @@ export const passengerService = {
         )
       `
       )
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .neq('status', 'cancelled');
 
     if (statsError) throw statsError;
 
@@ -467,5 +468,17 @@ export const passengerService = {
       console.error('Error getting bus seats:', error);
       throw error;
     }
+  },
+
+  async getTicketStats(userId: string) {
+    const { data, error } = await supabase
+      .from('tickets')
+      .select('*')
+      .eq('passenger_id', userId)
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
   }
 };

@@ -1,7 +1,7 @@
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import Link from "next/link"
-import { Bus } from "lucide-react"
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import Link from 'next/link';
+import { Bus } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -11,8 +11,10 @@ export default function Home() {
           <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white">
             <Bus className="w-8 h-8" />
           </div>
-          <h1 className="text-2xl font-bold text-center">BusGo</h1>
-          <p className="text-center text-muted-foreground">Book bus tickets easily with our mobile-first application</p>
+          <h1 className="text-2xl font-bold text-center">NorthPoint</h1>
+          <p className="text-center text-muted-foreground">
+            Book bus tickets easily with our mobile-first application
+          </p>
           <Button asChild className="w-full">
             <Link href="/sign-up">Sign Up</Link>
           </Button>
@@ -22,6 +24,5 @@ export default function Home() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
-
