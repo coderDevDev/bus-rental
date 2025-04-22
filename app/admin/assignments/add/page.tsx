@@ -40,6 +40,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { adminService } from '@/services/admin-service';
 import type { Route, Bus, Conductor } from '@/types';
+import ClientOnly from '@/components/client-only';
 
 const formSchema = z.object({
   route_id: z.string().min(1, 'Route is required'),
@@ -50,7 +51,15 @@ const formSchema = z.object({
   status: z.enum(['active', 'scheduled', 'completed', 'cancelled'])
 });
 
-export default function AddAssignmentPage() {
+export default function AddAssignment() {
+  return (
+    <ClientOnly>
+      <AddAssignmentPage />
+    </ClientOnly>
+  );
+}
+
+function AddAssignmentPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
