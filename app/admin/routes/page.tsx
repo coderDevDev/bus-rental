@@ -1,5 +1,6 @@
 'use client';
 
+import createClientComponent from '@/app/dynamic-wrap';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -54,7 +55,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/components/admin/stat-card';
 import type { RouteWithLocations } from '@/types';
 
-export default function RoutesPage() {
+function RoutesPage() {
   const [routes, setRoutes] = useState<RouteWithLocations[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -457,3 +458,5 @@ export default function RoutesPage() {
     </AdminLayout>
   );
 }
+
+export default createClientComponent(RoutesPage);

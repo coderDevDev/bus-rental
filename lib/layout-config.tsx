@@ -12,6 +12,7 @@ const clientOnlyPages = [
   '/payment',
   '/support',
   '/booking-confirmation',
+  '/admin/routes',
   '/forgot-password',
   '/reset-password',
   '/admin/routes/add',
