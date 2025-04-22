@@ -1,91 +1,21 @@
 import { ReactNode } from 'react';
 import ClientOnly from '@/components/client-only';
 
-// Centralized config to manage which pages need client-only rendering
+// Simplified config to catch all pages under major sections
 const clientOnlyPages = [
-  '/',
-  '/admin/assignments/add',
-  '/onboarding',
-  '/dashboard',
-  '/conductor',
-  '/conductor/issue-ticket',
-  '/payment',
-  '/support',
-  '/booking-confirmation',
-  '/admin/routes',
-  '/forgot-password',
-  '/reset-password',
-  '/admin/routes/add',
-  '/admin/routes/edit',
-  '/admin/routes/view',
-  '/admin/routes/delete',
-  '/admin/routes/list',
-  '/admin/routes/search',
-  '/admin/routes/view',
-  '/admin/routes/edit',
-  '/admin/routes/delete',
-  '/admin/routes/list',
-  '/admin/routes/search',
-  '/admin/routes/view',
-  '/admin/routes/edit',
-  '/admin/routes/delete',
-  '/admin/routes/list',
-  '/admin/routes/search',
-  '/admin/routes/view',
-  '/admin/routes/edit',
-  '/admin/routes/delete',
-  '/admin/routes/list',
-  '/admin/routes/search',
-  '/admin/routes/view',
-  '/admin/routes/edit',
-  '/admin/routes/delete',
-  '/admin/routes/list',
-  '/admin/routes/search',
-  '/admin/routes/view',
-  '/admin/routes/edit',
-  '/admin/routes/delete',
-  '/admin/routes/list',
-  '/admin/routes/search',
-  '/admin/routes/view',
-  '/admin/routes/edit',
-  '/admin/routes/delete',
-  '/admin/routes/list',
-  '/admin/routes/search',
-  '/admin/routes/view',
-  '/admin/routes/edit',
-  '/admin/routes/delete',
-  '/admin/routes/list',
-  '/admin/routes/search',
-  '/admin/routes/view',
-  '/admin/routes/edit',
-  '/admin/routes/delete',
-  '/admin/routes/list',
-  '/admin/routes/search',
-  '/admin/routes/view',
-  '/admin/routes/edit',
-  '/conductor/issue-ticket',
-  '/conductor/profile',
-  '/conductor/profile/edit',
-  '/conductor/profile/view',
-  '/conductor/profile/delete',
-  '/conductor/profile/list',
-  '/conductor/profile/search',
-  '/payment/page',
-  '/profile/page',
-  '/reset-password/page',
-  '/support/page',
-  '/admin/routes/add',
-  '/admin/routes/edit',
-  '/admin/routes/view',
-  '/admin/routes/delete',
-  '/admin/routes/list',
-  '/onboarding/page',
-  '/conductor/issue-ticket/page',
-  '/conductor/profile/page',
-  '/conductor/profile/edit',
-  '/conductor/profile/view',
-  '/conductor/profile/delete',
-  '/conductor/profile/list'
+  '/', // Root page
+  '/admin', // All admin pages
+  '/conductor', // All conductor pages
+  '/dashboard', // All dashboard pages
+  '/booking-confirmation', // Booking confirmation pages
+  '/onboarding', // Onboarding pages
+  '/payment', // Payment pages
+  '/sign-up', // Sign up pages
+  '/sign-in', // Sign in pages
+  '/support', // Support pages
+  '/forgot-password', // Forgot password pages
+  '/reset-password', // Reset password pages
+  '/profile' // Profile pages
 ];
 
 export function withClientOnly(page: ReactNode, pathname?: string) {
@@ -95,7 +25,10 @@ export function withClientOnly(page: ReactNode, pathname?: string) {
   }
 
   // Check if any of our patterns match the current pathname
-  const shouldWrap = clientOnlyPages.some(path => pathname.startsWith(path));
+  // This will now match any page that starts with the paths in clientOnlyPages
+  const shouldWrap = clientOnlyPages.some(
+    path => pathname === path || pathname.startsWith(`${path}/`)
+  );
 
   if (shouldWrap) {
     return <ClientOnly>{page}</ClientOnly>;
