@@ -3,6 +3,7 @@ import ClientOnly from '@/components/client-only';
 
 // Centralized config to manage which pages need client-only rendering
 const clientOnlyPages = [
+  '/',
   '/admin/assignments/add',
   '/onboarding',
   '/dashboard',

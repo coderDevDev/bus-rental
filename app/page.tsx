@@ -1,9 +1,27 @@
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import ClientOnly from '@/components/client-only';
+import dynamic from 'next/dynamic';
+import { Card, CardContent } from '@/components/ui/card';
 import { Bus } from 'lucide-react';
 
-export default function Home() {
+// Use dynamic import with SSR disabled
+export default dynamic(() => Promise.resolve(HomePage), {
+  ssr: false
+});
+
+function HomePage() {
+  return (
+    <ClientOnly>
+      <HomeContent />
+    </ClientOnly>
+  );
+}
+
+function HomeContent() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-b from-maroon-700 to-maroon-900">
       <Card className="w-full max-w-md">
