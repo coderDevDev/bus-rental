@@ -67,7 +67,16 @@ const clientOnlyPages = [
   '/conductor/profile/view',
   '/conductor/profile/delete',
   '/conductor/profile/list',
-  '/conductor/profile/search'
+  '/conductor/profile/search',
+  '/payment/page',
+  '/profile/page',
+  '/reset-password/page',
+  '/support/page',
+  '/admin/routes/add',
+  '/admin/routes/edit',
+  '/admin/routes/view',
+  '/admin/routes/delete',
+  '/admin/routes/list'
 ];
 
 export function withClientOnly(page: ReactNode, pathname?: string) {
