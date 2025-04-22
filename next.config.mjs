@@ -1,5 +1,10 @@
 import path from 'path';
 
+/**
+ * Use import.meta.url to emulate __dirname in ESM
+ */
+const __dirname = path.dirname(new URL('.', import.meta.url).pathname);
+
 let userConfig = undefined;
 try {
   userConfig = await import('./v0-user-next.config');
@@ -20,17 +25,12 @@ const nextConfig = {
   },
   reactStrictMode: true,
 
-  // Force all pages to be client-side rendered in production
   output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
 
-  // Add custom webpack config to avoid SSR issues
   webpack: (config, { isServer, dev }) => {
-    // If not in development and it's the server build
     if (!dev && isServer) {
-      // Replace React server components with empty shells
       config.resolve.alias = {
         ...config.resolve.alias,
-        // Add client modules that cause issues
         'react-dom/server': path.resolve(__dirname, './scripts/empty-module.js')
       };
     }
@@ -41,24 +41,25 @@ const nextConfig = {
   experimental: {
     appDir: true,
     esmExternals: 'loose',
-    // Disable server components features that cause issues
     serverComponents: false
-    // Other experimental options...
   },
+
   staticPageGenerationTimeout: 1000
 };
 
-mergeConfig(nextConfig, userConfig);
+mergeConfig(nextConfig, userConfig?.default);
 
+/**
+ * Merge user config into base config
+ */
 function mergeConfig(nextConfig, userConfig) {
-  if (!userConfig) {
-    return;
-  }
+  if (!userConfig) return;
 
   for (const key in userConfig) {
     if (
       typeof nextConfig[key] === 'object' &&
-      !Array.isArray(nextConfig[key])
+      !Array.isArray(nextConfig[key]) &&
+      nextConfig[key] !== null
     ) {
       nextConfig[key] = {
         ...nextConfig[key],
