@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,8 +18,25 @@ import Link from 'next/link';
 import { ArrowLeft, Bus, Eye, EyeOff, Lock, RefreshCw } from 'lucide-react';
 import { updatePassword } from '@/lib/supabase/auth';
 import { ClientLayout } from '@/components/client-layout';
+import dynamic from 'next/dynamic';
+import ClientOnly from '@/components/client-only';
 
-export default function ResetPassword() {
+// Use dynamic import with SSR disabled
+export default dynamic(() => Promise.resolve(ResetPasswordPage), {
+  ssr: false
+});
+
+function ResetPasswordPage() {
+  return (
+    <ClientOnly>
+      <Suspense fallback={<div>Loading reset password form...</div>}>
+        <ResetPasswordContent />
+      </Suspense>
+    </ClientOnly>
+  );
+}
+
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -152,6 +169,32 @@ export default function ResetPassword() {
     }
   };
 
+  if (linkError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center">Link Expired</CardTitle>
+            <CardDescription className="text-center">
+              Your password reset link is no longer valid
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
+              <RefreshCw className="mx-auto h-8 w-8 text-amber-600 mb-2" />
+              <p className="text-sm text-amber-800">{linkError}</p>
+            </div>
+            <Button
+              className="w-full"
+              onClick={() => router.push('/forgot-password')}>
+              Request New Link
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <ClientLayout>
       <div className="flex flex-col min-h-screen bg-gradient-to-b from-maroon-700 to-maroon-900">
@@ -170,124 +213,85 @@ export default function ResetPassword() {
           </div>
 
           <Card className="w-full max-w-md">
-            {linkError ? (
-              <>
-                <CardHeader>
-                  <CardTitle className="text-2xl text-center">
-                    Link Expired
-                  </CardTitle>
-                  <CardDescription className="text-center">
-                    Your password reset link is no longer valid
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
-                    <RefreshCw className="mx-auto h-8 w-8 text-amber-600 mb-2" />
-                    <p className="text-sm text-amber-800">{linkError}</p>
-                  </div>
-                  <Button
-                    className="w-full"
-                    onClick={() => router.push('/forgot-password')}>
-                    Request New Link
-                  </Button>
-                </CardContent>
-              </>
-            ) : (
-              <>
-                <CardHeader>
-                  <CardTitle className="text-2xl text-center">
-                    Create New Password
-                  </CardTitle>
-                  <CardDescription className="text-center">
-                    Enter your new password below
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="newPassword">New Password</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                        <Input
-                          id="newPassword"
-                          type={showPassword ? 'text' : 'password'}
-                          placeholder="Enter new password"
-                          value={newPassword}
-                          onChange={e => setNewPassword(e.target.value)}
-                          className="pl-10 pr-10"
-                          required
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0 top-0 h-10 w-10"
-                          onClick={() => setShowPassword(!showPassword)}>
-                          {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Confirm Password</Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                        <Input
-                          id="confirmPassword"
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          placeholder="Confirm new password"
-                          value={confirmPassword}
-                          onChange={e => setConfirmPassword(e.target.value)}
-                          className="pl-10 pr-10"
-                          required
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0 top-0 h-10 w-10"
-                          onClick={() =>
-                            setShowConfirmPassword(!showConfirmPassword)
-                          }>
-                          {showConfirmPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {error && (
-                      <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-100 rounded-md">
-                        {error}
-                      </div>
-                    )}
-
+            <CardHeader>
+              <CardTitle className="text-2xl text-center">
+                Create New Password
+              </CardTitle>
+              <CardDescription className="text-center">
+                Enter your new password below
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword">New Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                    <Input
+                      id="newPassword"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Enter new password"
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      className="pl-10 pr-10"
+                      required
+                    />
                     <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={isLoading}>
-                      {isLoading ? 'Resetting...' : 'Reset Password'}
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-10 w-10"
+                      onClick={() => setShowPassword(!showPassword)}>
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </Button>
-                  </form>
-                </CardContent>
-              </>
-            )}
-            <CardFooter className="flex justify-center">
-              <div className="text-sm text-muted-foreground">
-                Remember your password?{' '}
-                <Link
-                  href="/sign-in"
-                  className="text-primary underline underline-offset-4">
-                  Sign In
-                </Link>
-              </div>
-            </CardFooter>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      placeholder="Confirm new password"
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      className="pl-10 pr-10"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-10 w-10"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }>
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-100 rounded-md">
+                    {error}
+                  </div>
+                )}
+
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? 'Resetting...' : 'Reset Password'}
+                </Button>
+              </form>
+            </CardContent>
           </Card>
         </div>
       </div>
