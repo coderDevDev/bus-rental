@@ -1,6 +1,11 @@
 // This script modifies the .next/server directory to bypass SSR
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get current file directory with ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Run this script after next build completes
 console.log('Disabling SSR...');
@@ -17,9 +22,8 @@ export const dynamic = 'force-dynamic';
 `;
 
 // Path to Next.js build directory
-const nextDir = path.join(process.cwd(), '.next', 'server');
+const nextDir = path.join(path.resolve(__dirname, '..'), '.next', 'server');
 
-// Write an empty placeholder
 // Try to patch key server files
 try {
   // Find and modify key files
