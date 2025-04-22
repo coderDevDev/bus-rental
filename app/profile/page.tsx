@@ -1,11 +1,55 @@
-"use client"
+'use client';
 
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Settings } from "lucide-react"
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowLeft, Settings } from 'lucide-react';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import createClientComponent from '@/app/dynamic-wrap';
+import ClientOnly from '@/components/client-only';
+import dynamic from 'next/dynamic';
+import { useAuth } from '@/hooks/use-auth';
+
+// Use dynamic import with SSR disabled
+export default dynamic(() => Promise.resolve(ProfilePage), {
+  ssr: false
+});
+
+function ProfilePage() {
+  return (
+    <ClientOnly>
+      <ProfileContent />
+    </ClientOnly>
+  );
+}
+
+function ProfileContent() {
+  const router = useRouter();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    // Redirect based on user role
+    if (user) {
+      if (user.role === 'admin') {
+        router.push('/admin/profile');
+      } else if (user.role === 'conductor') {
+        router.push('/conductor/profile');
+      } else {
+        router.push('/dashboard/profile');
+      }
+    }
+  }, [user, router]);
+
+  // Simple loading state while we redirect
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <p className="text-lg text-gray-600">Redirecting to your profile...</p>
+    </div>
+  );
+}
 
 export default function Profile() {
   return (
@@ -18,7 +62,9 @@ export default function Profile() {
               <span className="sr-only">Back</span>
             </Link>
           </Button>
-          <h1 className="font-bold text-lg absolute left-1/2 -translate-x-1/2">Profile</h1>
+          <h1 className="font-bold text-lg absolute left-1/2 -translate-x-1/2">
+            Profile
+          </h1>
           <Button variant="ghost" size="icon" asChild className="ml-auto">
             <Link href="/settings">
               <Settings className="h-5 w-5" />
@@ -50,8 +96,9 @@ export default function Profile() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">
-              This is a sample user bio. The user can edit this in their profile settings. Lorem ipsum dolor sit amet,
-              consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+              This is a sample user bio. The user can edit this in their profile
+              settings. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+              Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
             </p>
           </CardContent>
         </Card>
@@ -65,8 +112,10 @@ export default function Profile() {
 
           <TabsContent value="posts" className="mt-4">
             <div className="grid grid-cols-2 gap-4">
-              {[1, 2, 3, 4, 5, 6].map((item) => (
-                <div key={item} className="aspect-square bg-muted rounded-md flex items-center justify-center">
+              {[1, 2, 3, 4, 5, 6].map(item => (
+                <div
+                  key={item}
+                  className="aspect-square bg-muted rounded-md flex items-center justify-center">
                   Post {item}
                 </div>
               ))}
@@ -76,17 +125,21 @@ export default function Profile() {
           <TabsContent value="activity" className="mt-4">
             <Card>
               <CardContent className="p-4 space-y-4">
-                {[1, 2, 3].map((item) => (
-                  <div key={item} className="flex items-start gap-4 pb-4 border-b last:border-0">
+                {[1, 2, 3].map(item => (
+                  <div
+                    key={item}
+                    className="flex items-start gap-4 pb-4 border-b last:border-0">
                     <Avatar>
                       <AvatarFallback>U</AvatarFallback>
                     </Avatar>
                     <div>
                       <p className="text-sm">
-                        <span className="font-medium">You</span> liked a post from{" "}
-                        <span className="font-medium">User {item}</span>
+                        <span className="font-medium">You</span> liked a post
+                        from <span className="font-medium">User {item}</span>
                       </p>
-                      <p className="text-xs text-muted-foreground">2 days ago</p>
+                      <p className="text-xs text-muted-foreground">
+                        2 days ago
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -96,8 +149,10 @@ export default function Profile() {
 
           <TabsContent value="saved" className="mt-4">
             <div className="grid grid-cols-2 gap-4">
-              {[1, 2, 3, 4].map((item) => (
-                <div key={item} className="aspect-square bg-muted rounded-md flex items-center justify-center">
+              {[1, 2, 3, 4].map(item => (
+                <div
+                  key={item}
+                  className="aspect-square bg-muted rounded-md flex items-center justify-center">
                   Saved {item}
                 </div>
               ))}
@@ -106,6 +161,5 @@ export default function Profile() {
         </Tabs>
       </main>
     </div>
-  )
+  );
 }
-
