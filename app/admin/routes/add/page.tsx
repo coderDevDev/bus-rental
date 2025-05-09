@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import type { Location, Route } from '@/types';
+import type { Location, Route, RouteStop } from '@/types';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -24,18 +24,21 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { ArrowLeft, PlusCircle } from 'lucide-react';
+import { ArrowLeft, PlusCircle, Grip, X } from 'lucide-react';
 import { routeService } from '@/services/route-service';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger
+  DialogTrigger,
+  DialogFooter
 } from '@/components/ui/dialog';
 import mapboxgl from 'mapbox-gl';
 import mapboxSdk from '@mapbox/mapbox-sdk';
 import directionsService from '@mapbox/mapbox-sdk/services/directions';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { RouteMap } from '@/components/map/RouteMap';
 
 // Setup Mapbox client
 // You'll need to store your Mapbox token in an environment variable
@@ -43,7 +46,12 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
 // Initialize the Mapbox SDK client
-const mapboxClient = mapboxSdk({ accessToken: MAPBOX_TOKEN });
+
+console.log(process.env.NEXT_PUBLIC_MAPBOX_TOKEN);
+const mapboxClient = mapboxSdk({
+  accessToken:
+    'pk.eyJ1IjoibWlyYW5mYW0tMTIzIiwiYSI6ImNtMnUwa3AwNjA5MTAyanB4aGtxNXlkanUifQ.oYbW0ZPDHKZ8_fwy7ilmyA'
+});
 const directionsClient = directionsService(mapboxClient);
 
 // Add this near the top to verify MAPBOX_TOKEN is available
@@ -59,8 +67,7 @@ export default function AddRoutePage() {
   >({
     route_number: '',
     name: '',
-    from_location: '' as string,
-    to_location: '' as string,
+    stops: [],
     distance: 0,
     base_fare: 0,
     estimated_duration: 0,
@@ -78,6 +85,9 @@ export default function AddRoutePage() {
   // Add these states to track calculation
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [calculationError, setCalculationError] = useState<string | null>(null);
+
+  // Add state for selected stop
+  const [selectedStop, setSelectedStop] = useState<string>('');
 
   useEffect(() => {
     const loadLocations = async () => {
@@ -119,29 +129,7 @@ export default function AddRoutePage() {
     setIsSubmitting(true);
 
     try {
-      // Find the location objects from their IDs
-      const fromLocation = locations.find(l => l.id === formData.from_location);
-      const toLocation = locations.find(l => l.id === formData.to_location);
-
-      if (!fromLocation || !toLocation) {
-        toast({
-          title: 'Validation Error',
-          description: 'Selected locations are invalid',
-          variant: 'destructive'
-        });
-        return;
-      }
-
-      // Create the route data with Location objects
-      const routeData = {
-        ...formData,
-        from_location: fromLocation, // Replace ID with Location object
-        to_location: toLocation // Replace ID with Location object
-      };
-
-      await routeService.createRoute(routeData);
-      // close the modal
-      setIsAddingLocation(false);
+      await routeService.createRoute(formData);
       toast({
         title: 'Success',
         description: 'Route added successfully'
@@ -215,20 +203,30 @@ export default function AddRoutePage() {
   // Replace the current useEffect with this enhanced version
   useEffect(() => {
     console.log('Location selection changed:', {
-      from: formData.from_location,
-      to: formData.to_location,
-      fromLocation: locations.find(l => l.id === formData.from_location),
-      toLocation: locations.find(l => l.id === formData.to_location)
+      from: formData.stops.length > 0 ? formData.stops[0].location.id : null,
+      to:
+        formData.stops.length > 0
+          ? formData.stops[formData.stops.length - 1].location.id
+          : null,
+      fromLocation: locations.find(
+        l => l.id === formData.stops[0]?.location.id
+      ),
+      toLocation: locations.find(
+        l => l.id === formData.stops[formData.stops.length - 1]?.location.id
+      )
     });
 
     // Only calculate if both locations are selected and user hasn't manually entered values
     if (
-      formData.from_location &&
-      formData.to_location &&
+      formData.stops.length > 0 &&
       (formData.distance === 0 || formData.estimated_duration === 0)
     ) {
-      const fromLocation = locations.find(l => l.id === formData.from_location);
-      const toLocation = locations.find(l => l.id === formData.to_location);
+      const fromLocation = locations.find(
+        l => l.id === formData.stops[0].location.id
+      );
+      const toLocation = locations.find(
+        l => l.id === formData.stops[formData.stops.length - 1].location.id
+      );
 
       if (fromLocation && toLocation) {
         console.log(
@@ -236,79 +234,60 @@ export default function AddRoutePage() {
           fromLocation,
           toLocation
         );
-        calculateRouteWithMapbox(fromLocation, toLocation);
+        calculateRouteWithMapbox();
       }
     }
   }, [
-    formData.from_location,
-    formData.to_location,
+    formData.stops.length,
     locations,
     formData.distance,
     formData.estimated_duration
   ]);
 
   // Add this function to calculate route using Mapbox
-  const calculateRouteWithMapbox = async (
-    fromLocation: Location,
-    toLocation: Location
-  ) => {
+  const calculateRouteWithMapbox = async () => {
+    if (formData.stops.length < 2) return;
+
     try {
       setIsCalculatingRoute(true);
       setCalculationError(null);
 
-      // Ensure we have valid coordinates
-      if (
-        !fromLocation.latitude ||
-        !fromLocation.longitude ||
-        !toLocation.latitude ||
-        !toLocation.longitude
-      ) {
-        throw new Error('Invalid location coordinates');
-      }
+      // Create waypoints from all stops
+      const waypoints = formData.stops.map(stop => ({
+        coordinates: [stop.location.longitude, stop.location.latitude]
+      }));
 
-      // First check if the straight-line distance is likely to exceed Mapbox's limit
-      const straightLineDistance = calculateDistance(
-        fromLocation.latitude,
-        fromLocation.longitude,
-        toLocation.latitude,
-        toLocation.longitude
-      );
-
-      // If the straight-line distance is already over 350km, don't even try the API call
-      // (Using 350km as a safety margin below the ~400km API limit)
-      if (straightLineDistance > 350) {
-        throw new Error('Distance exceeds Mapbox API limitations (400km max)');
-      }
-
-      // Call Mapbox Directions API
       const response = await directionsClient
         .getDirections({
-          profile: 'driving-traffic', // Use 'driving-traffic' for most accurate bus travel times
-          waypoints: [
-            { coordinates: [fromLocation.longitude, fromLocation.latitude] },
-            { coordinates: [toLocation.longitude, toLocation.latitude] }
-          ],
+          profile: 'driving-traffic',
+          waypoints,
           geometries: 'geojson'
         })
         .send();
 
       if (response && response.body.routes && response.body.routes.length > 0) {
         const route = response.body.routes[0];
-
-        // Get distance in kilometers (Mapbox returns distance in meters)
         const distance = parseFloat((route.distance / 1000).toFixed(2));
+        const duration = Math.ceil((route.duration * 1.2) / 60);
 
-        // Get duration in minutes (Mapbox returns duration in seconds)
-        // For bus routes, add 20% to the normal driving time to account for stops
-        const durationSeconds = route.duration * 1.2;
-        const duration = Math.ceil(durationSeconds / 60);
+        // Calculate arrival offsets for each stop
+        const legs = route.legs || [];
+        let currentOffset = 0;
+        const updatedStops = formData.stops.map((stop, index) => {
+          if (index === 0) return { ...stop, arrivalOffset: 0 };
 
-        // Update form data
+          const legDuration = Math.ceil(
+            ((legs[index - 1]?.duration || 0) * 1.2) / 60
+          );
+          currentOffset += legDuration;
+          return { ...stop, arrivalOffset: currentOffset };
+        });
+
         setFormData(prev => ({
           ...prev,
-          distance: prev.distance === 0 ? distance : prev.distance,
-          estimated_duration:
-            prev.estimated_duration === 0 ? duration : prev.estimated_duration
+          stops: updatedStops,
+          distance,
+          estimated_duration: duration
         }));
       } else {
         throw new Error('No route found between locations');
@@ -332,10 +311,10 @@ export default function AddRoutePage() {
 
       // Fall back to Haversine calculation for any error
       const distance = calculateDistance(
-        fromLocation.latitude,
-        fromLocation.longitude,
-        toLocation.latitude,
-        toLocation.longitude
+        formData.stops[0].location.latitude,
+        formData.stops[0].location.longitude,
+        formData.stops[formData.stops.length - 1].location.latitude,
+        formData.stops[formData.stops.length - 1].location.longitude
       );
 
       // For the fallback, use a lower average speed for long distances
@@ -352,6 +331,55 @@ export default function AddRoutePage() {
     } finally {
       setIsCalculatingRoute(false);
     }
+  };
+
+  // Add function to handle adding stops
+  const handleAddStop = () => {
+    if (!selectedStop) return;
+
+    const location = locations.find(l => l.id === selectedStop);
+    if (!location) return;
+
+    const newStop: RouteStop = {
+      location,
+      stopNumber: formData.stops.length + 1,
+      arrivalOffset:
+        formData.stops.length === 0 ? 0 : formData.estimated_duration
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      stops: [...prev.stops, newStop]
+    }));
+    setSelectedStop('');
+  };
+
+  // Add function to handle removing stops
+  const handleRemoveStop = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      stops: prev.stops.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Add function to handle reordering stops
+  const handleDragEnd = (result: any) => {
+    if (!result.destination) return;
+
+    const stops = Array.from(formData.stops);
+    const [reorderedStop] = stops.splice(result.source.index, 1);
+    stops.splice(result.destination.index, 0, reorderedStop);
+
+    // Update stop numbers
+    const updatedStops = stops.map((stop, index) => ({
+      ...stop,
+      stopNumber: index + 1
+    }));
+
+    setFormData(prev => ({
+      ...prev,
+      stops: updatedStops
+    }));
   };
 
   return (
@@ -384,6 +412,9 @@ export default function AddRoutePage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="border rounded-lg overflow-hidden">
+                <RouteMap stops={formData.stops} className="h-[400px]" />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="route_number">Route Number</Label>
@@ -407,19 +438,19 @@ export default function AddRoutePage() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <Label htmlFor="from_location">From Location</Label>
+                    <Label htmlFor="stops">Route Stops</Label>
                     <Dialog
                       open={isAddingLocation}
                       onOpenChange={setIsAddingLocation}>
                       <DialogTrigger asChild>
                         <Button variant="ghost" size="sm">
                           <PlusCircle className="h-4 w-4 mr-2" />
-                          Add Location
+                          Add Stop
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>Add New Location</DialogTitle>
+                          <DialogTitle>Add New Stop</DialogTitle>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
                           <div className="space-y-2">
@@ -502,64 +533,82 @@ export default function AddRoutePage() {
                           // disabled={isAddingLocation}
                           className="w-full">
                           {/* {isAddingLocation ? 'Adding...' : 'Add Location'} */}
-                          Add Location
+                          Add Stop
                         </Button>
                       </DialogContent>
                     </Dialog>
                   </div>
-                  <Select
-                    value={formData.from_location}
-                    onValueChange={value => {
-                      console.log('From location changed to:', value);
-                      setFormData(prev => ({
-                        ...prev,
-                        from_location: value,
-                        // Reset distance and duration when changing location to ensure recalculation
-                        ...(prev.distance === 0 && { distance: 0 }),
-                        ...(prev.estimated_duration === 0 && {
-                          estimated_duration: 0
-                        })
-                      }));
-                    }}>
-                    <SelectTrigger id="from_location">
-                      <SelectValue placeholder="Select starting location" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locations.map(location => (
-                        <SelectItem key={location.id} value={location.id}>
-                          {location.city}, {location.state}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="to_location">To Location</Label>
-                  <Select
-                    value={formData.to_location}
-                    onValueChange={value => {
-                      console.log('To location changed to:', value);
-                      setFormData(prev => ({
-                        ...prev,
-                        to_location: value,
-                        // Reset distance and duration when changing location to ensure recalculation
-                        ...(prev.distance === 0 && { distance: 0 }),
-                        ...(prev.estimated_duration === 0 && {
-                          estimated_duration: 0
-                        })
-                      }));
-                    }}>
-                    <SelectTrigger id="to_location">
-                      <SelectValue placeholder="Select destination" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locations.map(location => (
-                        <SelectItem key={location.id} value={location.id}>
-                          {location.city}, {location.state}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Route Stops</Label>
+                      <div className="flex gap-2">
+                        <Select
+                          value={selectedStop}
+                          onValueChange={setSelectedStop}>
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Select a stop location" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {locations.map(location => (
+                              <SelectItem key={location.id} value={location.id}>
+                                {location.city}, {location.state}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button type="button" onClick={handleAddStop}>
+                          Add Stop
+                        </Button>
+                      </div>
+
+                      <DragDropContext onDragEnd={handleDragEnd}>
+                        <Droppable droppableId="stops">
+                          {provided => (
+                            <div
+                              {...provided.droppableProps}
+                              ref={provided.innerRef}
+                              className="space-y-2 mt-4">
+                              {formData.stops.map((stop, index) => (
+                                <Draggable
+                                  key={stop.location.id}
+                                  draggableId={stop.location.id}
+                                  index={index}>
+                                  {provided => (
+                                    <div
+                                      ref={provided.innerRef}
+                                      {...provided.draggableProps}
+                                      className="flex items-center gap-2 p-2 border rounded-md bg-background">
+                                      <div {...provided.dragHandleProps}>
+                                        <Grip className="h-5 w-5" />
+                                      </div>
+                                      <span className="font-medium">
+                                        Stop {stop.stopNumber}:
+                                      </span>
+                                      <span className="flex-1">
+                                        {stop.location.city},{' '}
+                                        {stop.location.state}
+                                      </span>
+                                      <span className="text-sm text-muted-foreground">
+                                        +{stop.arrivalOffset} mins
+                                      </span>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleRemoveStop(index)}>
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  )}
+                                </Draggable>
+                              ))}
+                              {provided.placeholder}
+                            </div>
+                          )}
+                        </Droppable>
+                      </DragDropContext>
+                    </div>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="distance">Distance (km)</Label>
@@ -581,12 +630,11 @@ export default function AddRoutePage() {
                       </div>
                     )}
                   </div>
-                  {formData.from_location &&
-                    formData.to_location &&
+                  {formData.stops.length > 0 &&
                     formData.distance === 0 &&
                     !isCalculatingRoute && (
                       <p className="text-xs text-muted-foreground">
-                        Will be automatically calculated when both locations are
+                        Will be automatically calculated when all stops are
                         selected
                       </p>
                     )}
@@ -620,8 +668,7 @@ export default function AddRoutePage() {
                       </div>
                     )}
                   </div>
-                  {formData.from_location &&
-                    formData.to_location &&
+                  {formData.stops.length > 0 &&
                     formData.estimated_duration === 0 &&
                     !isCalculatingRoute && (
                       <p className="text-xs text-muted-foreground">

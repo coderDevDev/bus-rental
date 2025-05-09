@@ -178,12 +178,25 @@ function AddAssignmentPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {routes.map(route => (
-                            <SelectItem key={route.id} value={route.id}>
-                              {route.name} ({route.from_location.city} to{' '}
-                              {route.to_location.city})
-                            </SelectItem>
-                          ))}
+                          {routes.map(route => {
+                            const firstStop = route.stops?.[0]?.location;
+                            const lastStop =
+                              route.stops?.[route.stops.length - 1]?.location;
+
+                            return (
+                              <SelectItem key={route.id} value={route.id}>
+                                {route.name} (
+                                {firstStop?.city ||
+                                  route.from_location?.city ||
+                                  'Unknown'}{' '}
+                                to{' '}
+                                {lastStop?.city ||
+                                  route.to_location?.city ||
+                                  'Unknown'}
+                                )
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     </FormControl>

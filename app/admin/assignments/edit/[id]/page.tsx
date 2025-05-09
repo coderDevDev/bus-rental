@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { use } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -49,11 +50,11 @@ const formSchema = z
     path: ['end_date']
   });
 
-export default function EditAssignmentPage({
-  params
-}: {
-  params: { id: string };
-}) {
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default function EditAssignmentPage({ params }: PageProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -61,6 +62,7 @@ export default function EditAssignmentPage({
   const [buses, setBuses] = useState<Bus[]>([]);
   const [conductors, setConductors] = useState<Conductor[]>([]);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
+  const { id } = use(params);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema)
@@ -72,7 +74,7 @@ export default function EditAssignmentPage({
         setLoading(true);
         const [assignmentData, routesData, busesData, conductorsData] =
           await Promise.all([
-            assignmentService.getAssignment(params.id),
+            assignmentService.getAssignment(id),
             adminService.getRoutes(),
             adminService.getBuses(),
             adminService.getConductors()
@@ -107,7 +109,7 @@ export default function EditAssignmentPage({
     };
 
     loadData();
-  }, [params.id, form, toast]);
+  }, [id, form, toast]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
@@ -141,7 +143,7 @@ export default function EditAssignmentPage({
 
       console.log('Sending update with datass:', updateData);
 
-      await assignmentService.updateAssignment(params.id, updateData);
+      await assignmentService.updateAssignment(id, updateData);
       toast({
         title: 'Success',
         description: 'Assignment updated successfully'

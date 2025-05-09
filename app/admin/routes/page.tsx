@@ -54,6 +54,32 @@ import { AdminLayout } from '@/components/admin/admin-layout';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatCard } from '@/components/admin/stat-card';
 import type { RouteWithLocations } from '@/types';
+import { RouteMap } from '@/components/map/RouteMap';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from '@/components/ui/dialog';
+
+function getRouteEndpoints(route: RouteWithLocations) {
+  // If route has stops array, use first and last stop
+  if (route.stops?.length > 0) {
+    const firstStop = route.stops[0];
+    const lastStop = route.stops[route.stops.length - 1];
+    return {
+      from: firstStop.location,
+      to: lastStop.location
+    };
+  }
+
+  // Otherwise use from_location and to_location
+  return {
+    from: route.from_location,
+    to: route.to_location
+  };
+}
 
 function RoutesPage() {
   const [routes, setRoutes] = useState<RouteWithLocations[]>([]);
@@ -65,6 +91,8 @@ function RoutesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('all');
+  const [selectedRouteForMap, setSelectedRouteForMap] =
+    useState<RouteWithLocations | null>(null);
 
   useEffect(() => {
     loadRoutes();
@@ -110,17 +138,17 @@ function RoutesPage() {
     }
   };
 
-  const filteredRoutes = routes.filter(
-    route =>
-      route.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      route.from_location?.city
-        ?.toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      route.to_location?.city
-        ?.toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      route.route_number?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredRoutes = routes.filter(route => {
+    const searchTerm = searchQuery.toLowerCase();
+    const { from, to } = getRouteEndpoints(route);
+
+    return (
+      route.name?.toLowerCase().includes(searchTerm) ||
+      from?.city?.toLowerCase().includes(searchTerm) ||
+      to?.city?.toLowerCase().includes(searchTerm) ||
+      route.route_number?.toLowerCase().includes(searchTerm)
+    );
+  });
 
   const activeRoutes = filteredRoutes.filter(
     route => route.status === 'active'
@@ -166,6 +194,89 @@ function RoutesPage() {
       </Link>
     </Button>
   );
+
+  const getRouteStops = (route: RouteWithLocations) => {
+    if (route.stops?.length > 0) {
+      return route.stops;
+    }
+
+    // Convert point-to-point route to stops format
+    if (route.from_location && route.to_location) {
+      return [
+        {
+          location: route.from_location,
+          stopNumber: 1,
+          arrivalOffset: 0
+        },
+        {
+          location: route.to_location,
+          stopNumber: 2,
+          arrivalOffset: route.estimated_duration
+        }
+      ];
+    }
+
+    return [];
+  };
+
+  const renderTableRow = (route: RouteWithLocations) => {
+    const { from, to } = getRouteEndpoints(route);
+    return (
+      <TableRow key={route.id} className="hover:bg-maroon-50">
+        <TableCell>{route.route_number}</TableCell>
+        <TableCell className="font-medium text-maroon-800">
+          {route.name}
+        </TableCell>
+        <TableCell>{from ? `${from.city}, ${from.state}` : 'N/A'}</TableCell>
+        <TableCell>{to ? `${to.city}, ${to.state}` : 'N/A'}</TableCell>
+        <TableCell>{route.distance ?? 'N/A'} km</TableCell>
+        <TableCell>₱{route.base_fare?.toFixed(2) ?? 'N/A'}</TableCell>
+        <TableCell>
+          <Badge
+            className={
+              route.status === 'active'
+                ? 'bg-green-500 text-white'
+                : 'bg-gray-500 text-white'
+            }>
+            {route.status}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-right">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-maroon-700 hover:bg-maroon-100">
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">Actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {/* <DropdownMenuItem onClick={() => setSelectedRouteForMap(route)}>
+                <MapPin className="h-4 w-4 mr-2" />
+                View Map
+              </DropdownMenuItem> */}
+              <DropdownMenuItem asChild>
+                <Link href={`/admin/routes/edit/${route.id}`}>
+                  View Details
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => {
+                  setSelectedRoute(route);
+                  setIsDeleteDialogOpen(true);
+                }}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TableCell>
+      </TableRow>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -267,79 +378,80 @@ function RoutesPage() {
                 </div>
               ) : (
                 <div className="divide-y divide-maroon-100">
-                  {displayRoutes.map(route => (
-                    <div key={route.id} className="p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h3 className="font-medium text-maroon-800">
-                            {route.name}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            {route.route_number}
-                          </p>
+                  {displayRoutes.map(route => {
+                    const { from, to } = getRouteEndpoints(route);
+                    return (
+                      <div key={route.id} className="p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h3 className="font-medium text-maroon-800">
+                              {route.name}
+                            </h3>
+                            <p className="text-sm text-muted-foreground">
+                              {route.route_number}
+                            </p>
+                          </div>
+                          <Badge
+                            className={
+                              route.status === 'active'
+                                ? 'bg-green-500 text-white'
+                                : 'bg-gray-500 text-white'
+                            }>
+                            {route.status}
+                          </Badge>
                         </div>
-                        <Badge
-                          className={
-                            route.status === 'active'
-                              ? 'bg-green-500 text-white'
-                              : 'bg-gray-500 text-white'
-                          }>
-                          {route.status}
-                        </Badge>
+                        <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-muted-foreground" />
+                            <p>
+                              {from?.city}, {from?.state || 'N/A'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                            <p>
+                              {to?.city}, {to?.state || 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Distance</p>
+                            <p>{route.distance || 'N/A'} km</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Duration</p>
+                            <p>{route.estimated_duration || 'N/A'} min</p>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-muted-foreground">Fare</p>
+                            <p>₱{route.fare?.toFixed(2) || 'N/A'}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-maroon-200 hover:bg-maroon-50"
+                            asChild>
+                            <Link href={`/admin/routes/edit/${route.id}`}>
+                              <Edit className="h-4 w-4 mr-2 text-maroon-600" />
+                              Edit
+                            </Link>
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-red-200 hover:bg-red-50 text-red-600 hover:text-red-700"
+                            onClick={() => {
+                              setSelectedRoute(route);
+                              setIsDeleteDialogOpen(true);
+                            }}>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </Button>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3 text-muted-foreground" />
-                          <p>
-                            {route.from_location?.city},{' '}
-                            {route.from_location?.state || 'N/A'}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                          <p>
-                            {route.to_location?.city},{' '}
-                            {route.to_location?.state || 'N/A'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Distance</p>
-                          <p>{route.distance || 'N/A'} km</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Duration</p>
-                          <p>{route.estimated_duration || 'N/A'} min</p>
-                        </div>
-                        <div className="col-span-2">
-                          <p className="text-muted-foreground">Fare</p>
-                          <p>₱{route.fare?.toFixed(2) || 'N/A'}</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-maroon-200 hover:bg-maroon-50"
-                          asChild>
-                          <Link href={`/admin/routes/edit/${route.id}`}>
-                            <Edit className="h-4 w-4 mr-2 text-maroon-600" />
-                            Edit
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-red-200 hover:bg-red-50 text-red-600 hover:text-red-700"
-                          onClick={() => {
-                            setSelectedRoute(route);
-                            setIsDeleteDialogOpen(true);
-                          }}>
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -366,67 +478,7 @@ function RoutesPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  displayRoutes.map(route => (
-                    <TableRow key={route.id} className="hover:bg-maroon-50">
-                      <TableCell>{route.route_number}</TableCell>
-                      <TableCell className="font-medium text-maroon-800">
-                        {route.name}
-                      </TableCell>
-                      <TableCell>
-                        {route.from_location.city}, {route.from_location.state}
-                      </TableCell>
-                      <TableCell>
-                        {route.to_location.city}, {route.to_location.state}
-                      </TableCell>
-                      <TableCell>{route.distance} km</TableCell>
-                      <TableCell>₱{route.base_fare.toFixed(2)}</TableCell>
-                      <TableCell>
-                        <Badge
-                          className={
-                            route.status === 'active'
-                              ? 'bg-green-500 text-white'
-                              : 'bg-gray-500 text-white'
-                          }>
-                          {route.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-maroon-700 hover:bg-maroon-100">
-                              <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Actions</span>
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link href={`/admin/routes/${route.id}`}>
-                                View Details
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/admin/routes/edit/${route.id}`}>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => {
-                                setSelectedRoute(route);
-                                setIsDeleteDialogOpen(true);
-                              }}>
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  displayRoutes.map(route => renderTableRow(route))
                 )}
               </TableBody>
             </Table>
@@ -455,6 +507,82 @@ function RoutesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={!!selectedRouteForMap}
+        onOpenChange={() => setSelectedRouteForMap(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedRouteForMap?.name} ({selectedRouteForMap?.route_number})
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {selectedRouteForMap && (
+              <>
+                <RouteMap
+                  stops={getRouteStops(selectedRouteForMap)}
+                  className="h-[500px]"
+                />
+                <div className="space-y-2">
+                  <h3 className="font-medium">Route Details</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Distance</p>
+                      <p>{selectedRouteForMap.distance} km</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Duration</p>
+                      <p>{selectedRouteForMap.estimated_duration} min</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Base Fare</p>
+                      <p>₱{selectedRouteForMap.base_fare.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Status</p>
+                      <Badge
+                        className={
+                          selectedRouteForMap.status === 'active'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-500 text-white'
+                        }>
+                        {selectedRouteForMap.status}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Show stops list */}
+                  <div className="mt-4">
+                    <h3 className="font-medium mb-2">Stops</h3>
+                    <div className="space-y-2">
+                      {getRouteStops(selectedRouteForMap).map((stop, index) => (
+                        <div
+                          key={stop.location.id}
+                          className="flex items-center gap-2 p-2 rounded-lg bg-secondary">
+                          <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <p className="font-medium">
+                              {stop.location.city}, {stop.location.state}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {stop.arrivalOffset === 0
+                                ? 'Starting Point'
+                                : `+${stop.arrivalOffset} mins`}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

@@ -150,30 +150,20 @@ function DashboardPageContent() {
     bookingData: BookingData
   ): Promise<Ticket> => {
     try {
-      // Create tickets for each passenger
-      const ticketPromises = bookingData.passengers.map(async passenger => {
-        const ticket = await passengerService.bookTicket({
-          conductor_id: bookingData.conductor_id,
-          assignment_id: bookingData.assignmentId,
-          passenger_name: passenger.passenger_name,
-          passenger_id: passenger.passenger_id,
-          passenger_type: passenger.passenger_type,
-          seat_number: passenger.seat_number,
-          from_location: passenger.from_location,
-          to_location: passenger.to_location,
-          amount: passenger.amount,
-          payment_method: passenger.payment_method,
-          payment_status: passenger.payment_status,
-          status: passenger.status
-        });
-        return ticket;
+      console.log({ bookingData });
+      const ticket = await passengerService.bookTicket({
+        ...bookingData,
+        passengers: bookingData.passengers.map(p => ({
+          name: p.name,
+          passenger_type: p.passenger_type,
+          seat_number: p.seat_number,
+          fare: p.fare,
+          status: 'active' as const
+        }))
       });
 
-      const newTickets = await Promise.all(ticketPromises);
-      setTickets(prev => [...newTickets, ...prev]);
-
-      // Return the first ticket for confirmation dialog
-      return newTickets[0];
+      setTickets(prev => [ticket, ...prev]);
+      return ticket;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to book tickets';

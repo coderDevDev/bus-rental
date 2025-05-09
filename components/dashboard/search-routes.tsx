@@ -169,7 +169,7 @@ export function SearchRoutes({
             exit={{ opacity: 0, y: 20 }}
             className="space-y-4">
             <h2 className="text-xl font-semibold text-maroon-800">
-              Available Routes
+              Available Routesss
             </h2>
             {results.map(route => (
               <motion.div
