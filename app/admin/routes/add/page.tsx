@@ -335,10 +335,24 @@ export default function AddRoutePage() {
 
   // Add function to handle adding stops
   const handleAddStop = () => {
-    if (!selectedStop) return;
+    if (!selectedStop) {
+      toast({
+        title: 'Error',
+        description: 'Please select a location',
+        variant: 'destructive'
+      });
+      return;
+    }
 
     const location = locations.find(l => l.id === selectedStop);
-    if (!location) return;
+    if (!location) {
+      toast({
+        title: 'Error',
+        description: 'Invalid location selected',
+        variant: 'destructive'
+      });
+      return;
+    }
 
     const newStop: RouteStop = {
       location,
@@ -352,6 +366,11 @@ export default function AddRoutePage() {
       stops: [...prev.stops, newStop]
     }));
     setSelectedStop('');
+
+    // Recalculate route metrics if we have at least 2 stops
+    if (formData.stops.length >= 1) {
+      calculateRouteMetrics([...formData.stops, newStop]);
+    }
   };
 
   // Add function to handle removing stops
