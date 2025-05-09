@@ -227,8 +227,8 @@ function RoutesPage() {
         <TableCell className="font-medium text-maroon-800">
           {route.name}
         </TableCell>
-        <TableCell>{from ? `${from.city}, ${from.state}` : 'N/A'}</TableCell>
-        <TableCell>{to ? `${to.city}, ${to.state}` : 'N/A'}</TableCell>
+        {/* <TableCell>{from ? `${from.city}, ${from.state}` : 'N/A'}</TableCell>
+        <TableCell>{to ? `${to.city}, ${to.state}` : 'N/A'}</TableCell> */}
         <TableCell>{route.distance ?? 'N/A'} km</TableCell>
         <TableCell>₱{route.base_fare?.toFixed(2) ?? 'N/A'}</TableCell>
         <TableCell>
@@ -460,8 +460,7 @@ function RoutesPage() {
                 <TableRow>
                   <TableHead>Route Number</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>From</TableHead>
-                  <TableHead>To</TableHead>
+
                   <TableHead>Distance</TableHead>
                   <TableHead>Base Fare</TableHead>
                   <TableHead>Status</TableHead>
